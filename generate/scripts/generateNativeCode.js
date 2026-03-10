@@ -43,8 +43,8 @@ module.exports = function generateNativeCode() {
     class_header: utils.readLocalFile("templates/templates/class_header.h"),
     struct_header: utils.readLocalFile("templates/templates/struct_header.h"),
     binding: utils.readLocalFile("templates/templates/binding.gyp"),
-    nodegitCC: utils.readLocalFile("templates/templates/nodegit.cc"),
-    nodegitJS: utils.readLocalFile("templates/templates/nodegit.js"),
+    bungitCC: utils.readLocalFile("templates/templates/bungit.cc"),
+    bungitJS: utils.readLocalFile("templates/templates/bungit.js"),
     enums: utils.readLocalFile("templates/templates/enums.js")
   };
 
@@ -111,7 +111,7 @@ module.exports = function generateNativeCode() {
     return !idef.ignore;
   });
 
-  const tempDirPath = path.join(os.tmpdir(), 'nodegit_build');
+  const tempDirPath = path.join(os.tmpdir(), 'bungit_build');
   const tempSrcDirPath = path.join(tempDirPath, "src");
   const tempIncludeDirPath = path.join(tempDirPath, "include");
 
@@ -125,8 +125,8 @@ module.exports = function generateNativeCode() {
   }).then(function() {
     // Write out single purpose templates.
     utils.writeLocalFile("../binding.gyp", beautify(templates.binding.render(enabled)), "binding.gyp");
-    utils.writeFile(path.join(tempSrcDirPath, "nodegit.cc"), templates.nodegitCC.render(enabled), "nodegit.cc");
-    utils.writeLocalFile("../lib/nodegit.js", beautify(templates.nodegitJS.render(enabled)), "nodegit.js");
+    utils.writeFile(path.join(tempSrcDirPath, "bungit.cc"), templates.bungitCC.render(enabled), "bungit.cc");
+    utils.writeLocalFile("../lib/bungit.js", beautify(templates.bungitJS.render(enabled)), "bungit.js");
     // Write out all the classes.
     enabled.forEach(function(idef) {
       if (idef.type && idef.type != "enum") {

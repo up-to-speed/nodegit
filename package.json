@@ -1,6 +1,6 @@
 {
-  "name": "nodegit",
-  "description": "Node.js libgit2 asynchronous native bindings",
+  "name": "bungit",
+  "description": "Bun-compatible libgit2 asynchronous native bindings",
   "version": "0.28.0-alpha.36",
   "homepage": "http://nodegit.org",
   "keywords": [
@@ -25,8 +25,7 @@
       "email": "tylerw@axosoft.com"
     }
   ],
-  "main": "lib/nodegit.js",
-  "types": "lib/nodegit.d.ts",
+  "main": "lib/bungit.js",
   "repository": {
     "type": "git",
     "url": "git://github.com/nodegit/nodegit.git"
@@ -40,12 +39,11 @@
   },
   "dependencies": {
     "@mapbox/node-pre-gyp": "^2.0.0",
-    "@types/nodegit": "0.26.7",
     "fs-extra": "^7.0.0",
     "got": "^14.4.7",
     "json5": "^2.1.0",
     "lodash": "^4.17.14",
-    "nan": "^2.23.1",
+    "node-addon-api": "^5.1.0",
     "node-gyp": "^11.2.0",
     "tar-fs": "^3.0.9"
   },
@@ -62,13 +60,14 @@
   },
   "binary": {
     "bucket_name": "axonodegit",
-    "module_name": "nodegit",
+    "module_name": "bungit",
     "module_path": "./build/Release/",
-    "host": "https://axonodegit.s3.amazonaws.com/nodegit/nodegit/"
+    "host": "https://axonodegit.s3.amazonaws.com/bungit/bungit/",
+    "napi_versions": [8]
   },
   "scripts": {
     "cov": "npm run cppcov && npm run filtercov && npm run mergecov",
-    "cppcov": "mkdir -p test/coverage/cpp && ./lcov-1.10/bin/lcov --gcov-tool /usr/bin/gcov-4.9 --capture --directory build/Release/obj.target/nodegit/src --output-file test/coverage/cpp/lcov_full.info",
+    "cppcov": "mkdir -p test/coverage/cpp && ./lcov-1.10/bin/lcov --gcov-tool /usr/bin/gcov-4.9 --capture --directory build/Release/obj.target/bungit/src --output-file test/coverage/cpp/lcov_full.info",
     "filtercov": "./lcov-1.10/bin/lcov --extract test/coverage/cpp/lcov_full.info $(pwd)/src/* $(pwd)/src/**/* $(pwd)/include/* $(pwd)/include/**/* --output-file test/coverage/cpp/lcov.info && rm test/coverage/cpp/lcov_full.info",
     "generateJson": "node generate/scripts/generateJson",
     "generateMissingTests": "node generate/scripts/generateMissingTests",
@@ -84,7 +83,9 @@
     "rebuildDebug": "node generate && node-gyp configure --debug build",
     "recompile": "node-gyp configure build",
     "recompileDebug": "node-gyp configure --debug build",
-    "test": "npm run lint && node --expose-gc test",
+    "test": "npm run test:node && npm run test:bun",
+    "test:node": "node --expose-gc test",
+    "test:bun": "bun node_modules/.bin/mocha --expose-gc test/runner test/tests --timeout 15000",
     "xcodeDebug": "node-gyp configure -- -f xcode"
   }
 }

@@ -6,8 +6,7 @@ namespace nodegit {
   }
 
   AsyncBaton::AsyncBaton()
-    : asyncResource(ThreadPool::GetCurrentAsyncResource()),
-    callbackErrorHandle(*ThreadPool::GetCurrentCallbackErrorHandle()),
+    : callbackErrorHandle(*ThreadPool::GetCurrentCallbackErrorHandle()),
     completedMutex(new std::mutex),
     hasCompleted(false)
   {}
@@ -22,12 +21,8 @@ namespace nodegit {
     onCompletion();
   }
 
-  Nan::AsyncResource *AsyncBaton::GetAsyncResource() {
-    return asyncResource;
-  }
-
-  void AsyncBaton::SetCallbackError(v8::Local<v8::Value> error) {
-    callbackErrorHandle.Reset(error);
+  void AsyncBaton::SetCallbackError(Napi::Value error) {
+    callbackErrorHandle.Reset(error, 1);
   }
 
   void AsyncBaton::ExecuteAsyncPerform(AsyncCallback asyncCallback, AsyncCallback asyncCancelCb, CompletionCallback onCompletion) {

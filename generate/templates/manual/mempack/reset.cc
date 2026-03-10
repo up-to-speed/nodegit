@@ -1,25 +1,27 @@
 // Manual binding for git_mempack_reset, exposed as Mempack.prototype.reset()
 
-NAN_METHOD(GitMempack::Reset) {
-  if (!info[info.Length() - 1]->IsFunction()) {
-    return Nan::ThrowError("Callback is required and must be a Function.");
+Napi::Value GitMempack::Reset(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+  if (!info[info.Length() - 1].IsFunction()) {
+    Napi::Error::New(env, "Callback is required and must be a Function.").ThrowAsJavaScriptException();
+    return env.Undefined();
   }
 
   ResetBaton *baton = new ResetBaton();
   baton->error_code = GIT_OK;
   baton->error = NULL;
-  baton->backend = Nan::ObjectWrap::Unwrap<GitMempack>(info.This())->GetValue();
+  baton->backend = Napi::ObjectWrap<GitMempack>::Unwrap(info.This().As<Napi::Object>())->GetValue();
 
-  Nan::Callback *callback =
-      new Nan::Callback(v8::Local<Function>::Cast(info[info.Length() - 1]));
+  Napi::FunctionReference callback;
+  callback = Napi::Persistent(info[info.Length() - 1].As<Napi::Function>());
   std::map<std::string, std::shared_ptr<nodegit::CleanupHandle>> cleanupHandles;
-  ResetWorker *worker = new ResetWorker(baton, callback, cleanupHandles);
+  ResetWorker *worker = new ResetWorker(baton, std::move(callback), cleanupHandles);
 
-  worker->Reference<GitMempack>("backend", info.This());
+  worker->Reference<GitMempack>("backend", info.This().As<Napi::Object>());
 
-  nodegit::Context *nodegitContext = reinterpret_cast<nodegit::Context *>(info.Data().As<External>()->Value());
+  nodegit::Context *nodegitContext = nodegit::Context::GetCurrentContext(env);
   nodegitContext->QueueWorker(worker);
-  return;
+  return env.Undefined();
 }
 
 nodegit::LockMaster GitMempack::ResetWorker::AcquireLocks() {
@@ -50,8 +52,9 @@ void GitMempack::ResetWorker::HandleErrorCallback() {
 }
 
 void GitMempack::ResetWorker::HandleOKCallback() {
-  v8::Local<v8::Value> argv[1] = {Nan::Null()};
-  callback->Call(1, argv, async_resource);
+  Napi::Env env = Env();
+  napi_value argv[1] = {env.Null()};
+  callback.Call(env.Undefined(), 1, argv);
 
   delete baton;
 }

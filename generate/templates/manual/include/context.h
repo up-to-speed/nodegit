@@ -3,10 +3,9 @@
 
 #include <map>
 #include <memory>
-#include <nan.h>
+#include <napi.h>
 #include <string>
 #include <uv.h>
-#include <v8.h>
 
 #include "async_worker.h"
 #include "cleanup_handle.h"
@@ -17,7 +16,7 @@ namespace nodegit {
   class AsyncContextCleanupHandle;
   class Context {
   public:
-    Context(v8::Isolate *isolate);
+    Context(Napi::Env env);
     Context(const Context &) = delete;
     Context(Context &&) = delete;
     Context &operator=(const Context &) = delete;
@@ -25,13 +24,14 @@ namespace nodegit {
 
     ~Context();
 
+    static Context *GetCurrentContext(Napi::Env env);
     static Context *GetCurrentContext();
 
-    v8::Local<v8::Value> GetFromPersistent(std::string key);
+    Napi::Value GetFromPersistent(std::string key);
 
     void QueueWorker(nodegit::AsyncWorker *worker);
 
-    void SaveToPersistent(std::string key, const v8::Local<v8::Value> &value);
+    void SaveToPersistent(std::string key, Napi::Value value);
 
     void SaveCleanupHandle(std::string key, std::shared_ptr<nodegit::CleanupHandle> cleanupHandle);
 
@@ -49,8 +49,12 @@ namespace nodegit {
       return nodegit::TrackerWrap::SizeFromList(&trackerList);
     }
 
+    inline Napi::Env GetEnv() const {
+      return Napi::Env(env_);
+    }
+
   private:
-    v8::Isolate *isolate;
+    napi_env env_;
 
     ThreadPool threadPool;
 
@@ -58,13 +62,14 @@ namespace nodegit {
     // after the context has been torn down.
     // Often this is used as a context-aware storage cell for `*::InitializeComponent`
     // to store function templates on them.
-    Nan::Global<v8::Object> persistentStorage;
+    Napi::ObjectReference persistentStorage;
 
     std::map<std::string, std::shared_ptr<CleanupHandle>> cleanupHandles;
 
     nodegit::TrackerWrap::TrackerList trackerList;
 
-    static std::map<v8::Isolate *, Context *> contexts;
+    static std::map<napi_env, Context *> contexts;
+    static thread_local Context *currentThreadContext;
   };
 
   class AsyncContextCleanupHandle {
@@ -76,14 +81,12 @@ namespace nodegit {
       ~AsyncContextCleanupHandle();
 
     private:
-      static void AsyncCleanupContext(void *data, void (*uvCallback)(void *), void *uvCallbackData);
+      static void AsyncCleanupContext(napi_async_cleanup_hook_handle handle, void *data);
 
       friend class Context;
-      AsyncContextCleanupHandle(v8::Isolate *isolate, Context *context);
+      AsyncContextCleanupHandle(Napi::Env env, Context *context);
       Context *context;
-      node::AsyncCleanupHookHandle handle;
-      void (*doneCallback)(void *);
-      void *doneData;
+      napi_async_cleanup_hook_handle handle;
   };
 }
 

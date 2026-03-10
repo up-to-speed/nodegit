@@ -1,8 +1,10 @@
 // Manual binding for git_mempack_new, exposed as Mempack.create()
 
-NAN_METHOD(GitMempack::Create) {
-  if (!info[info.Length() - 1]->IsFunction()) {
-    return Nan::ThrowError("Callback is required and must be a Function.");
+Napi::Value GitMempack::Create(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+  if (!info[info.Length() - 1].IsFunction()) {
+    Napi::Error::New(env, "Callback is required and must be a Function.").ThrowAsJavaScriptException();
+    return env.Undefined();
   }
 
   CreateBaton *baton = new CreateBaton();
@@ -10,14 +12,14 @@ NAN_METHOD(GitMempack::Create) {
   baton->error = NULL;
   baton->out = NULL;
 
-  Nan::Callback *callback =
-      new Nan::Callback(v8::Local<Function>::Cast(info[info.Length() - 1]));
+  Napi::FunctionReference callback;
+  callback = Napi::Persistent(info[info.Length() - 1].As<Napi::Function>());
   std::map<std::string, std::shared_ptr<nodegit::CleanupHandle>> cleanupHandles;
-  CreateWorker *worker = new CreateWorker(baton, callback, cleanupHandles);
+  CreateWorker *worker = new CreateWorker(baton, std::move(callback), cleanupHandles);
 
-  nodegit::Context *nodegitContext = reinterpret_cast<nodegit::Context *>(info.Data().As<External>()->Value());
+  nodegit::Context *nodegitContext = nodegit::Context::GetCurrentContext(env);
   nodegitContext->QueueWorker(worker);
-  return;
+  return env.Undefined();
 }
 
 nodegit::LockMaster GitMempack::CreateWorker::AcquireLocks() {
@@ -48,44 +50,46 @@ void GitMempack::CreateWorker::HandleErrorCallback() {
 }
 
 void GitMempack::CreateWorker::HandleOKCallback() {
+  Napi::Env env = Env();
+
   if (baton->error_code == GIT_OK) {
     if (baton->out == NULL) {
       // This should never happen if error_code == GIT_OK
-      v8::Local<v8::Value> argv[1] = {Nan::Error("Mempack creation returned OK but produced no backend.")};
-      callback->Call(1, argv, async_resource);
+      napi_value argv[1] = {Napi::Error::New(env, "Mempack creation returned OK but produced no backend.").Value()};
+      callback.Call(env.Undefined(), 1, argv);
       delete baton;
       return;
     }
 
-    v8::Local<v8::Value> to = GitMempack::New(baton->out, false);
-    v8::Local<v8::Value> argv[2] = {Nan::Null(), to};
-    callback->Call(2, argv, async_resource);
+    Napi::Value to = GitMempack::New(env, baton->out, false);
+    napi_value argv[2] = {env.Null(), to};
+    callback.Call(env.Undefined(), 2, argv);
   } else if (baton->error) {
-    v8::Local<v8::Object> err;
+    Napi::Object err;
     if (baton->error->message) {
-      err = Nan::To<v8::Object>(Nan::Error(baton->error->message)).ToLocalChecked();
+      err = Napi::Error::New(env, baton->error->message).Value().As<Napi::Object>();
     } else {
-      err = Nan::To<v8::Object>(Nan::Error("Method create has thrown an error.")).ToLocalChecked();
+      err = Napi::Error::New(env, "Method create has thrown an error.").Value().As<Napi::Object>();
     }
-    Nan::Set(err, Nan::New("errno").ToLocalChecked(), Nan::New(baton->error_code));
-    Nan::Set(err, Nan::New("errorFunction").ToLocalChecked(),
-             Nan::New("Mempack.create").ToLocalChecked());
-    v8::Local<v8::Value> argv[1] = {err};
-    callback->Call(1, argv, async_resource);
+    err.Set(Napi::String::New(env, "errno"), Napi::Number::New(env, baton->error_code));
+    err.Set(Napi::String::New(env, "errorFunction"),
+             Napi::String::New(env, "Mempack.create"));
+    napi_value argv[1] = {err};
+    callback.Call(env.Undefined(), 1, argv);
     if (baton->error->message)
       free((void *)baton->error->message);
     free((void *)baton->error);
   } else if (baton->error_code < 0) {
-    v8::Local<v8::Object> err =
-        Nan::To<v8::Object>(Nan::Error("Method create has thrown an error.")).ToLocalChecked();
-    Nan::Set(err, Nan::New("errno").ToLocalChecked(),
-             Nan::New(baton->error_code));
-    Nan::Set(err, Nan::New("errorFunction").ToLocalChecked(),
-             Nan::New("Mempack.create").ToLocalChecked());
-    v8::Local<v8::Value> argv[1] = {err};
-    callback->Call(1, argv, async_resource);
+    Napi::Object err =
+        Napi::Error::New(env, "Method create has thrown an error.").Value().As<Napi::Object>();
+    err.Set(Napi::String::New(env, "errno"),
+             Napi::Number::New(env, baton->error_code));
+    err.Set(Napi::String::New(env, "errorFunction"),
+             Napi::String::New(env, "Mempack.create"));
+    napi_value argv[1] = {err};
+    callback.Call(env.Undefined(), 1, argv);
   } else {
-    callback->Call(0, NULL, async_resource);
+    callback.Call({});
   }
 
   delete baton;

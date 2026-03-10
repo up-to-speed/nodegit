@@ -5,6 +5,7 @@ module.exports = function(args) {
         !arg.isSelf &&
         arg.name !== "payload" &&
         arg.name !== "self" &&
+        arg.name !== "data" &&
         !arg.ignore;
 
       if (!useArg) {

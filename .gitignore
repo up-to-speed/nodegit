@@ -3,6 +3,7 @@
 /include/
 /lib/enums.js
 /lib/nodegit.js
+/lib/bungit.js
 /node_modules/
 /src/
 /test/coverage/

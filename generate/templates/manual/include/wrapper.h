@@ -1,32 +1,21 @@
-/**
- * This code is auto-generated; unless you know what you're doing, do not modify!
- **/
-
 #ifndef WRAPPER_H
 #define WRAPPER_H
 
-#include <v8.h>
-#include <node.h>
-
-#include "nan.h"
+#include <napi.h>
 #include "context.h"
 
-using namespace node;
-using namespace v8;
-
-class Wrapper : public Nan::ObjectWrap {
+class Wrapper : public Napi::ObjectWrap<Wrapper> {
   public:
-    static void InitializeComponent (v8::Local<v8::Object> target, nodegit::Context *nodegitContext);
+    static Napi::Object InitializeComponent(Napi::Env env, Napi::Object target, nodegit::Context *nodegitContext);
 
     void *GetValue();
-    static v8::Local<v8::Value> New(const void *raw);
+    static Napi::Value New(Napi::Env env, const void *raw);
+
+    Wrapper(const Napi::CallbackInfo &info);
+
+    Napi::Value ToBuffer(const Napi::CallbackInfo &info);
 
   private:
-    Wrapper(void *raw);
-
-    static NAN_METHOD(JSNewFunction);
-    static NAN_METHOD(ToBuffer);
-
     void *raw;
 };
 

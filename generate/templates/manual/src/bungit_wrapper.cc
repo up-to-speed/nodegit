@@ -154,7 +154,7 @@ void NodeGitWrapper<Traits>::InitializeTemplate(Napi::Function &tpl) {
 
 template<typename Traits>
 void NodeGitWrapper<Traits>::Reference() {
-  Ref();
+  this->Ref();
   for (auto &i : referenceCallbacks) {
     i.second();
   }
@@ -162,7 +162,7 @@ void NodeGitWrapper<Traits>::Reference() {
 
 template<typename Traits>
 void NodeGitWrapper<Traits>::Unreference() {
-  Unref();
+  this->Unref();
   for (auto &i : unreferenceCallbacks) {
     i.second();
   }

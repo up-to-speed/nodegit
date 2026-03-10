@@ -9,7 +9,7 @@
 
 #include "../include/init_ssh2.h"
 #include "../include/lock_master.h"
-#include "../include/nodegit.h"
+#include "../include/bungit.h"
 #include "../include/context.h"
 #include "../include/wrapper.h"
 #include "../include/promise_completion.h"
@@ -99,7 +99,7 @@ Napi::Object Init(Napi::Env env, Napi::Object target) {
   Napi::HandleScope scope(env);
   nodegit::Context *nodegitContext = new nodegit::Context(env);
 
-  Wrapper::InitializeComponent(target, nodegitContext);
+  Wrapper::InitializeComponent(env, target, nodegitContext);
   PromiseCompletion::InitializeComponent(nodegitContext);
   {% each %}
     {% if type == 'class' %}
@@ -120,4 +120,4 @@ Napi::Object Init(Napi::Env env, Napi::Object target) {
   return target;
 }
 
-NODE_API_MODULE(nodegit, Init)
+NODE_API_MODULE(bungit, Init)

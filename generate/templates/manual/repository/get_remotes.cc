@@ -1,7 +1,9 @@
-NAN_METHOD(GitRepository::GetRemotes)
+Napi::Value GitRepository::GetRemotes(const Napi::CallbackInfo& info)
 {
-  if (!info[info.Length() - 1]->IsFunction()) {
-    return Nan::ThrowError("Callback is required and must be a Function.");
+  Napi::Env env = info.Env();
+  if (!info[info.Length() - 1].IsFunction()) {
+    Napi::Error::New(env, "Callback is required and must be a Function.").ThrowAsJavaScriptException();
+    return env.Undefined();
   }
 
   GetRemotesBaton* baton = new GetRemotesBaton();
@@ -9,15 +11,16 @@ NAN_METHOD(GitRepository::GetRemotes)
   baton->error_code = GIT_OK;
   baton->error = NULL;
   baton->out = new std::vector<git_remote *>;
-  baton->repo = Nan::ObjectWrap::Unwrap<GitRepository>(info.This())->GetValue();
+  baton->repo = GitRepository::Unwrap(info.This().As<Napi::Object>())->GetValue();
 
-  Nan::Callback *callback = new Nan::Callback(Local<Function>::Cast(info[info.Length() - 1]));
+  Napi::FunctionReference callback;
+  callback.Reset(info[info.Length() - 1].As<Napi::Function>());
   std::map<std::string, std::shared_ptr<nodegit::CleanupHandle>> cleanupHandles;
-  GetRemotesWorker *worker = new GetRemotesWorker(baton, callback, cleanupHandles);
-  worker->Reference<GitRepository>("repo", info.This());
-  nodegit::Context *nodegitContext = reinterpret_cast<nodegit::Context *>(info.Data().As<External>()->Value());
+  GetRemotesWorker *worker = new GetRemotesWorker(baton, std::move(callback), cleanupHandles);
+  worker->Reference<GitRepository>("repo", info.This().As<Napi::Object>());
+  nodegit::Context *nodegitContext = nodegit::Context::GetCurrentContext();
   nodegitContext->QueueWorker(worker);
-  return;
+  return env.Undefined();
 }
 
 nodegit::LockMaster GitRepository::GetRemotesWorker::AcquireLocks() {
@@ -104,37 +107,38 @@ void GitRepository::GetRemotesWorker::HandleErrorCallback() {
 
 void GitRepository::GetRemotesWorker::HandleOKCallback()
 {
+  Napi::Env env = Env();
   if (baton->out != NULL)
   {
     unsigned int size = baton->out->size();
-    Local<Array> result = Nan::New<Array>(size);
+    Napi::Array result = Napi::Array::New(env, size);
     for (unsigned int i = 0; i < size; i++) {
       git_remote *remote = baton->out->at(i);
-      Nan::Set(
-        result,
-        Nan::New<Number>(i),
+      result.Set(
+        i,
         GitRemote::New(
+          env,
           remote,
           true,
-          Nan::To<v8::Object>(GitRepository::New(git_remote_owner(remote), true)).ToLocalChecked()
+          GitRepository::New(env, git_remote_owner(remote), true).As<Napi::Object>()
         )
       );
     }
 
     delete baton->out;
 
-    Local<v8::Value> argv[2] = {
-      Nan::Null(),
+    napi_value argv[2] = {
+      env.Null(),
       result
     };
-    callback->Call(2, argv, async_resource);
+    callback.Call(env.Undefined(), 2, argv);
   }
   else if (baton->error)
   {
-    Local<v8::Value> argv[1] = {
-      Nan::Error(baton->error->message)
+    napi_value argv[1] = {
+      Napi::Error::New(env, baton->error->message).Value()
     };
-    callback->Call(1, argv, async_resource);
+    callback.Call(env.Undefined(), 1, argv);
     if (baton->error->message)
     {
       free((void *)baton->error->message);
@@ -144,17 +148,17 @@ void GitRepository::GetRemotesWorker::HandleOKCallback()
   }
   else if (baton->error_code < 0)
   {
-    Local<v8::Object> err = Nan::To<v8::Object>(Nan::Error("Repository refreshRemotes has thrown an error.")).ToLocalChecked();
-    Nan::Set(err, Nan::New("errno").ToLocalChecked(), Nan::New(baton->error_code));
-    Nan::Set(err, Nan::New("errorFunction").ToLocalChecked(), Nan::New("Repository.refreshRemotes").ToLocalChecked());
-    Local<v8::Value> argv[1] = {
+    Napi::Object err = Napi::Error::New(env, "Repository refreshRemotes has thrown an error.").Value().As<Napi::Object>();
+    err.Set("errno", Napi::Number::New(env, baton->error_code));
+    err.Set("errorFunction", Napi::String::New(env, "Repository.refreshRemotes"));
+    napi_value argv[1] = {
       err
     };
-    callback->Call(1, argv, async_resource);
+    callback.Call(env.Undefined(), 1, argv);
   }
   else
   {
-    callback->Call(0, NULL, async_resource);
+    callback.Call({});
   }
 
   delete baton;

@@ -18,25 +18,32 @@
  * @param Number flags
  * @param FilterList callback
  */
-NAN_METHOD(GitFilterList::Load) {
-  if (info.Length() == 0 || !info[0]->IsObject()) {
-    return Nan::ThrowError("Repository repo is required.");
+Napi::Value GitFilterList::Load(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+
+  if (info.Length() == 0 || !info[0].IsObject()) {
+    Napi::Error::New(env, "Repository repo is required.").ThrowAsJavaScriptException();
+    return env.Undefined();
   }
 
-  if (info.Length() == 2 || !info[2]->IsString()) {
-    return Nan::ThrowError("String path is required.");
+  if (info.Length() == 2 || !info[2].IsString()) {
+    Napi::Error::New(env, "String path is required.").ThrowAsJavaScriptException();
+    return env.Undefined();
   }
 
-  if (info.Length() == 3 || !info[3]->IsNumber()) {
-    return Nan::ThrowError("Number mode is required.");
+  if (info.Length() == 3 || !info[3].IsNumber()) {
+    Napi::Error::New(env, "Number mode is required.").ThrowAsJavaScriptException();
+    return env.Undefined();
   }
 
-  if (info.Length() == 4 || !info[4]->IsNumber()) {
-    return Nan::ThrowError("Number flags is required.");
+  if (info.Length() == 4 || !info[4].IsNumber()) {
+    Napi::Error::New(env, "Number flags is required.").ThrowAsJavaScriptException();
+    return env.Undefined();
   }
 
-  if (!info[info.Length() - 1]->IsFunction()) {
-    return Nan::ThrowError("Callback is required and must be a Function.");
+  if (!info[info.Length() - 1].IsFunction()) {
+    Napi::Error::New(env, "Callback is required and must be a Function.").ThrowAsJavaScriptException();
+    return env.Undefined();
   }
 
   LoadBaton *baton = new LoadBaton();
@@ -47,14 +54,14 @@ NAN_METHOD(GitFilterList::Load) {
   // start convert_from_v8 block
   git_repository *from_repo = NULL;
   from_repo =
-      Nan::ObjectWrap::Unwrap<GitRepository>(Nan::To<v8::Object>(info[0]).ToLocalChecked())->GetValue();
+      GitRepository::Unwrap(info[0].As<Napi::Object>())->GetValue();
   // end convert_from_v8 block
   baton->repo = from_repo;
   // start convert_from_v8 block
   git_blob *from_blob = NULL;
-  if (info[1]->IsObject()) {
+  if (info[1].IsObject()) {
     from_blob =
-        Nan::ObjectWrap::Unwrap<GitBlob>(Nan::To<v8::Object>(info[1]).ToLocalChecked())->GetValue();
+        GitBlob::Unwrap(info[1].As<Napi::Object>())->GetValue();
   } else {
     from_blob = 0;
   }
@@ -63,14 +70,14 @@ NAN_METHOD(GitFilterList::Load) {
   // start convert_from_v8 block
   const char *from_path = NULL;
 
-  Nan::Utf8String path(Nan::To<v8::String>(info[2]).ToLocalChecked());
+  std::string path = info[2].As<Napi::String>().Utf8Value();
   // malloc with one extra byte so we can add the terminating null character
   // C-strings expect:
   from_path = (const char *)malloc(path.length() + 1);
   // copy the characters from the nodejs string into our C-string (used instead
   // of strdup or strcpy because nulls in the middle of strings are valid coming
   // from nodejs):
-  memcpy((void *)from_path, *path, path.length());
+  memcpy((void *)from_path, path.c_str(), path.length());
   // ensure the final byte of our new string is null, extra casts added to
   // ensure compatibility with various C types used in the nodejs binding
   // generation:
@@ -79,26 +86,26 @@ NAN_METHOD(GitFilterList::Load) {
   baton->path = from_path;
   // start convert_from_v8 block
   git_filter_mode_t from_mode;
-  from_mode = (git_filter_mode_t)(int)info[3].As<v8::Number>()->Value();
+  from_mode = (git_filter_mode_t)(int)info[3].As<Napi::Number>().DoubleValue();
   // end convert_from_v8 block
   baton->mode = from_mode;
   // start convert_from_v8 block
   uint32_t from_flags;
-  from_flags = (uint32_t)info[4].As<v8::Number>()->Value();
+  from_flags = (uint32_t)info[4].As<Napi::Number>().DoubleValue();
   // end convert_from_v8 block
   baton->flags = from_flags;
 
-  Nan::Callback *callback =
-      new Nan::Callback(v8::Local<Function>::Cast(info[info.Length() - 1]));
+  Napi::FunctionReference callback;
+  callback.Reset(info[info.Length() - 1].As<Napi::Function>());
   std::map<std::string, std::shared_ptr<nodegit::CleanupHandle>> cleanupHandles;
-  LoadWorker *worker = new LoadWorker(baton, callback, cleanupHandles);
+  LoadWorker *worker = new LoadWorker(baton, std::move(callback), cleanupHandles);
 
   worker->Reference<GitRepository>("repo", info[0]);
   worker->Reference<GitBlob>("blob", info[1]);
 
-  nodegit::Context *nodegitContext = reinterpret_cast<nodegit::Context *>(info.Data().As<External>()->Value());
+  nodegit::Context *nodegitContext = nodegit::Context::GetCurrentContext();
   nodegitContext->QueueWorker(worker);
-  return;
+  return env.Undefined();
 }
 
 nodegit::LockMaster GitFilterList::LoadWorker::AcquireLocks() {
@@ -141,23 +148,20 @@ void GitFilterList::LoadWorker::HandleErrorCallback() {
 }
 
 void GitFilterList::LoadWorker::HandleOKCallback() {
+  Napi::Env env = Env();
   if (baton->error_code == GIT_OK) {
-    v8::Local<v8::Value> to;
+    Napi::Value to;
     // start convert_to_v8 block
 
     if (baton->filters != NULL) {
       // GitFilterList baton->filters
-      v8::Local<v8::Array> owners = Nan::New<Array>(0);
+      Napi::Array owners = Napi::Array::New(env, 0);
       nodegit::Context *nodegitContext = nodegit::Context::GetCurrentContext();
 
-      Nan::Set(
-        owners,
-        Nan::New<Number>(0),
-        Nan::To<v8::Object>(this->GetFromPersistent("repo")).ToLocalChecked()
-      );
+      owners.Set((uint32_t)0, this->GetFromPersistent("repo").As<Napi::Object>());
 
-      to = GitFilterList::New(baton->filters, true, Nan::To<v8::Object>(owners).ToLocalChecked());
-      auto filterListWrapper = Nan::ObjectWrap::Unwrap<GitFilterList>(to.As<v8::Object>());
+      to = GitFilterList::New(env, baton->filters, true, owners.As<Napi::Object>());
+      auto filterListWrapper = GitFilterList::Unwrap(to.As<Napi::Object>());
       auto filterRegistryCleanupHandles = static_pointer_cast<nodegit::FilterRegistryCleanupHandles>(nodegit::Context::GetCurrentContext()->GetCleanupHandle("filterRegistry"));
       std::for_each(
         filterRegistryCleanupHandles->registeredFilters.begin(),
@@ -169,55 +173,51 @@ void GitFilterList::LoadWorker::HandleOKCallback() {
         }
       );
     } else {
-      to = Nan::Null();
+      to = env.Null();
     }
 
     // end convert_to_v8 block
-    v8::Local<v8::Value> result = to;
+    Napi::Value result = to;
 
-    v8::Local<v8::Value> argv[2] = {Nan::Null(), result};
-    callback->Call(2, argv, async_resource);
+    napi_value argv[2] = {env.Null(), result};
+    callback.Call(env.Undefined(), 2, argv);
   } else {
     if (baton->error) {
-      v8::Local<v8::Object> err;
+      Napi::Object err;
       if (baton->error->message) {
-        err = Nan::To<v8::Object>(Nan::Error(baton->error->message)).ToLocalChecked();
+        err = Napi::Error::New(env, baton->error->message).Value().As<Napi::Object>();
       } else {
-        err = Nan::To<v8::Object>(Nan::Error("Method load has thrown an error.")).ToLocalChecked();
+        err = Napi::Error::New(env, "Method load has thrown an error.").Value().As<Napi::Object>();
       }
-      Nan::Set(err, Nan::New("errno").ToLocalChecked(), Nan::New(baton->error_code));
-      Nan::Set(err, Nan::New("errorFunction").ToLocalChecked(),
-               Nan::New("FilterList.load").ToLocalChecked());
-      v8::Local<v8::Value> argv[1] = {err};
-      callback->Call(1, argv, async_resource);
+      err.Set("errno", Napi::Number::New(env, baton->error_code));
+      err.Set("errorFunction", Napi::String::New(env, "FilterList.load"));
+      napi_value argv[1] = {err};
+      callback.Call(env.Undefined(), 1, argv);
       if (baton->error->message)
         free((void *)baton->error->message);
       free((void *)baton->error);
     } else if (baton->error_code < 0) {
       bool callbackFired = false;
       if (!callbackErrorHandle.IsEmpty()) {
-        v8::Local<v8::Value> maybeError = Nan::New(callbackErrorHandle);
-        if (!maybeError->IsNull() && !maybeError->IsUndefined()) {
-          v8::Local<v8::Value> argv[1] = {
+        Napi::Value maybeError = callbackErrorHandle.Value();
+        if (!maybeError.IsNull() && !maybeError.IsUndefined()) {
+          napi_value argv[1] = {
             maybeError
           };
-          callback->Call(1, argv, async_resource);
+          callback.Call(env.Undefined(), 1, argv);
           callbackFired = true;
         }
       }
 
       if (!callbackFired) {
-        v8::Local<v8::Object> err =
-            Nan::To<v8::Object>(Nan::Error("Method load has thrown an error.")).ToLocalChecked();
-        Nan::Set(err, Nan::New("errno").ToLocalChecked(),
-                 Nan::New(baton->error_code));
-        Nan::Set(err, Nan::New("errorFunction").ToLocalChecked(),
-                 Nan::New("FilterList.load").ToLocalChecked());
-        v8::Local<v8::Value> argv[1] = {err};
-        callback->Call(1, argv, async_resource);
+        Napi::Object err = Napi::Error::New(env, "Method load has thrown an error.").Value().As<Napi::Object>();
+        err.Set("errno", Napi::Number::New(env, baton->error_code));
+        err.Set("errorFunction", Napi::String::New(env, "FilterList.load"));
+        napi_value argv[1] = {err};
+        callback.Call(env.Undefined(), 1, argv);
       }
     } else {
-      callback->Call(0, NULL, async_resource);
+      callback.Call({});
     }
   }
 

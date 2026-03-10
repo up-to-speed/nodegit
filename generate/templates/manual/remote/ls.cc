@@ -1,7 +1,9 @@
-NAN_METHOD(GitRemote::ReferenceList)
+Napi::Value GitRemote::ReferenceList(const Napi::CallbackInfo& info)
 {
-  if (!info[info.Length() - 1]->IsFunction()) {
-    return Nan::ThrowError("Callback is required and must be a Function.");
+  Napi::Env env = info.Env();
+  if (!info[info.Length() - 1].IsFunction()) {
+    Napi::Error::New(env, "Callback is required and must be a Function.").ThrowAsJavaScriptException();
+    return env.Undefined();
   }
 
   ReferenceListBaton* baton = new ReferenceListBaton();
@@ -9,15 +11,16 @@ NAN_METHOD(GitRemote::ReferenceList)
   baton->error_code = GIT_OK;
   baton->error = NULL;
   baton->out = new std::vector<git_remote_head*>;
-  baton->remote = Nan::ObjectWrap::Unwrap<GitRemote>(info.This())->GetValue();
+  baton->remote = GitRemote::Unwrap(info.This().As<Napi::Object>())->GetValue();
 
-  Nan::Callback *callback = new Nan::Callback(Local<Function>::Cast(info[info.Length() - 1]));
+  Napi::FunctionReference callback;
+  callback.Reset(info[info.Length() - 1].As<Napi::Function>());
   std::map<std::string, std::shared_ptr<nodegit::CleanupHandle>> cleanupHandles;
-  ReferenceListWorker *worker = new ReferenceListWorker(baton, callback, cleanupHandles);
-  worker->Reference<GitRemote>("remote", info.This());
-  nodegit::Context *nodegitContext = reinterpret_cast<nodegit::Context *>(info.Data().As<External>()->Value());
+  ReferenceListWorker *worker = new ReferenceListWorker(baton, std::move(callback), cleanupHandles);
+  worker->Reference<GitRemote>("remote", info.This().As<Napi::Object>());
+  nodegit::Context *nodegitContext = nodegit::Context::GetCurrentContext();
   nodegitContext->QueueWorker(worker);
-  return;
+  return env.Undefined();
 }
 
 nodegit::LockMaster GitRemote::ReferenceListWorker::AcquireLocks() {
@@ -68,28 +71,29 @@ void GitRemote::ReferenceListWorker::HandleErrorCallback() {
 
 void GitRemote::ReferenceListWorker::HandleOKCallback()
 {
+  Napi::Env env = Env();
   if (baton->out != NULL)
   {
     unsigned int size = baton->out->size();
-    Local<Array> result = Nan::New<Array>(size);
+    Napi::Array result = Napi::Array::New(env, size);
     for (unsigned int i = 0; i < size; i++) {
-      Nan::Set(result, Nan::New<Number>(i), GitRemoteHead::New(baton->out->at(i), true));
+      result.Set(i, GitRemoteHead::New(env, baton->out->at(i), true));
     }
 
     delete baton->out;
 
-    Local<v8::Value> argv[2] = {
-      Nan::Null(),
+    napi_value argv[2] = {
+      env.Null(),
       result
     };
-    callback->Call(2, argv, async_resource);
+    callback.Call(env.Undefined(), 2, argv);
   }
   else if (baton->error)
   {
-    Local<v8::Value> argv[1] = {
-      Nan::Error(baton->error->message)
+    napi_value argv[1] = {
+      Napi::Error::New(env, baton->error->message).Value()
     };
-    callback->Call(1, argv, async_resource);
+    callback.Call(env.Undefined(), 1, argv);
     if (baton->error->message)
     {
       free((void *)baton->error->message);
@@ -99,17 +103,17 @@ void GitRemote::ReferenceListWorker::HandleOKCallback()
   }
   else if (baton->error_code < 0)
   {
-    Local<v8::Object> err = Nan::To<v8::Object>(Nan::Error("Reference List has thrown an error.")).ToLocalChecked();
-    Nan::Set(err, Nan::New("errno").ToLocalChecked(), Nan::New(baton->error_code));
-    Nan::Set(err, Nan::New("errorFunction").ToLocalChecked(), Nan::New("Remote.referenceList").ToLocalChecked());
-    Local<v8::Value> argv[1] = {
+    Napi::Object err = Napi::Error::New(env, "Reference List has thrown an error.").Value().As<Napi::Object>();
+    err.Set("errno", Napi::Number::New(env, baton->error_code));
+    err.Set("errorFunction", Napi::String::New(env, "Remote.referenceList"));
+    napi_value argv[1] = {
       err
     };
-    callback->Call(1, argv, async_resource);
+    callback.Call(env.Undefined(), 1, argv);
   }
   else
   {
-    callback->Call(0, NULL, async_resource);
+    callback.Call({});
   }
 
   delete baton;

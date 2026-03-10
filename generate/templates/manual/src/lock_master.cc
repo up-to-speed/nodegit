@@ -1,4 +1,4 @@
-#include <nan.h>
+#include <napi.h>
 #include <git2.h>
 #include <set>
 #include <vector>
@@ -35,7 +35,7 @@ namespace nodegit {
     thread_local static LockMasterImpl* currentLockMaster;
 
     // Cleans up any mutexes that are not currently used
-    static NAN_GC_CALLBACK(CleanupMutexes);
+    static void CleanupMutexes();
 
   public:
     static void InitializeContext();
@@ -94,10 +94,10 @@ namespace nodegit {
   }
 
   void LockMasterImpl::InitializeContext() {
-    Nan::AddGCEpilogueCallback(CleanupMutexes);
+    // No-op: mutex cleanup is now performed opportunistically in Unlock()
   }
 
-  NAN_GC_CALLBACK(LockMasterImpl::CleanupMutexes) {
+  void LockMasterImpl::CleanupMutexes() {
     std::lock_guard<std::mutex> lock(mapMutex);
 
     for (auto it = mutexes.begin(); it != mutexes.end(); )
@@ -203,6 +203,11 @@ namespace nodegit {
     });
 
     GetMutexes(releaseMutexes * -1);
+
+    // Opportunistically clean up unused mutexes when releasing
+    if (releaseMutexes) {
+      CleanupMutexes();
+    }
   }
 
   // LockMaster

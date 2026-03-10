@@ -1,5 +1,5 @@
 // generated from struct_content.cc
-#include <nan.h>
+#include <napi.h>
 #include <string.h>
 #ifdef WIN32
 #include <windows.h>
@@ -15,43 +15,39 @@ extern "C" {
 }
 
 #include <iostream>
-#include "../include/nodegit.h"
+#include "../include/bungit.h"
 #include "../include/lock_master.h"
 #include "../include/functions/copy.h"
 #include "../include/{{ filename }}.h"
-#include "nodegit_wrapper.cc"
+#include "bungit_wrapper.cc"
 
 {% each dependencies as dependency %}
   #include "{{ dependency }}"
 {% endeach %}
 
-using namespace v8;
-using namespace node;
 using namespace std;
 
 {% if isReturnable %}
-  {{ cppClassName }}::{{ cppClassName }}() : NodeGitWrapper<{{ cppClassName }}Traits>(NULL, true, v8::Local<v8::Object>())
+  {{ cppClassName }}::{{ cppClassName }}(const Napi::CallbackInfo &info)
+   : NodeGitWrapper<{{ cppClassName }}Traits>(info)
   {
-    {% if ignoreInit == true %}
-    this->raw = new {{ cType }};
-    {% else %}
-      {% if isExtendedStruct %}
-        {{ cType }}_extended wrappedValue = {{ cType|upper }}_INIT;
-        this->raw = ({{ cType }}*) malloc(sizeof({{ cType }}_extended));
-        memcpy(this->raw, &wrappedValue, sizeof({{ cType }}_extended));
+    if (info.Length() == 0 || !info[0].IsExternal()) {
+      // Default construction: initialize with default values
+      {% if ignoreInit == true %}
+      this->raw = new {{ cType }};
       {% else %}
-        {{ cType }} wrappedValue = {{ cType|upper }}_INIT;
-        this->raw = ({{ cType }}*) malloc(sizeof({{ cType }}));
-        memcpy(this->raw, &wrappedValue, sizeof({{ cType }}));
+        {% if isExtendedStruct %}
+          {{ cType }}_extended wrappedValue = {{ cType|upper }}_INIT;
+          this->raw = ({{ cType }}*) malloc(sizeof({{ cType }}_extended));
+          memcpy(this->raw, &wrappedValue, sizeof({{ cType }}_extended));
+        {% else %}
+          {{ cType }} wrappedValue = {{ cType|upper }}_INIT;
+          this->raw = ({{ cType }}*) malloc(sizeof({{ cType }}));
+          memcpy(this->raw, &wrappedValue, sizeof({{ cType }}));
+        {% endif %}
       {% endif %}
-    {% endif %}
-
-    this->ConstructFields();
-  }
-
-  {{ cppClassName }}::{{ cppClassName }}({{ cType }}* raw, bool selfFreeing, v8::Local<v8::Object> owner)
-   : NodeGitWrapper<{{ cppClassName }}Traits>(raw, selfFreeing, owner)
-  {
+      this->selfFreeing = true;
+    }
     this->ConstructFields();
   }
 
@@ -68,14 +64,16 @@ using namespace std;
   }
 
   void {{ cppClassName }}::ConstructFields() {
+    Napi::Env env = this->Env();
     {% each fields|fieldsInfo as field %}
       {% if not field.ignore %}
         {% if not field.isEnum %}
           {% if field.isLibgitType %}
-            v8::Local<Object> {{ field.name }}Temp = Nan::To<v8::Object>({{ field.cppClassName }}::New(
+            Napi::Object {{ field.name }}Temp = {{ field.cppClassName }}::New(
+              env,
               {%if not field.cType|isPointer %}&{%endif%}this->raw->{{ field.name }},
               false
-            )).ToLocalChecked();
+            ).As<Napi::Object>();
             this->{{ field.name }}.Reset({{ field.name }}Temp);
           {% endif %}
         {% endif %}
@@ -83,27 +81,26 @@ using namespace std;
     {% endeach %}
   }
 
-  void {{ cppClassName }}::InitializeComponent(Local<Object> target, nodegit::Context *nodegitContext) {
-    Nan::HandleScope scope;
+  void {{ cppClassName }}::InitializeComponent(Napi::Object target, nodegit::Context *nodegitContext) {
+    Napi::Env env = target.Env();
+    Napi::HandleScope scope(env);
 
-    Local<External> nodegitExternal = Nan::New<External>(nodegitContext);
-    Local<FunctionTemplate> tpl = Nan::New<FunctionTemplate>(JSNewFunction, nodegitExternal);
+    Napi::External<void> nodegitExternal = Napi::External<void>::New(env, nodegitContext);
 
-    tpl->InstanceTemplate()->SetInternalFieldCount(2);
-    tpl->SetClassName(Nan::New("{{ jsClassName }}").ToLocalChecked());
-
+    Napi::Function constructor_template = DefineClass(env, "{{ jsClassName }}", {
     {% each fields as field %}
       {% if not field.ignore %}
       {% if not field | isPayload %}
-        Nan::SetAccessor(tpl->InstanceTemplate(), Nan::New("{{ field.jsFunctionName }}").ToLocalChecked(), Get{{ field.cppFunctionName}}, Set{{ field.cppFunctionName}}, nodegitExternal);
+        InstanceAccessor("{{ field.jsFunctionName }}", &{{ cppClassName }}::Get{{ field.cppFunctionName}}, &{{ cppClassName }}::Set{{ field.cppFunctionName}}),
       {% endif %}
       {% endif %}
     {% endeach %}
+    });
 
-    InitializeTemplate(tpl);
+    InitializeTemplate(constructor_template);
 
-    v8::Local<Function> constructor_template = Nan::GetFunction(tpl).ToLocalChecked();
     nodegitContext->SaveToPersistent("{{ cppClassName }}::Template", constructor_template);
+    target.Set(Napi::String::New(env, "{{ jsClassName }}"), constructor_template);
   }
 
   {% partial fieldAccessors . %}
@@ -143,15 +140,16 @@ Configurable{{ cppClassName }}::~Configurable{{ cppClassName }}() {
   {% endeach %}
 }
 
-nodegit::ConfigurableClassWrapper<{{ cppClassName }}Traits>::v8ConversionResult Configurable{{ cppClassName }}::fromJavascript(nodegit::Context *nodegitContext, v8::Local<v8::Value> input) {
-  if (!input->IsObject()) {
+nodegit::ConfigurableClassWrapper<{{ cppClassName }}Traits>::v8ConversionResult Configurable{{ cppClassName }}::fromJavascript(nodegit::Context *nodegitContext, Napi::Value input) {
+  if (!input.IsObject()) {
     return {
       "Must pass object for Configurable{{ cppClassName }}"
     };
   }
 
-  Nan::HandleScope scope;
-  v8::Local<v8::Object> inputObj = input.As<v8::Object>();
+  Napi::Env env = input.Env();
+  Napi::HandleScope scope(env);
+  Napi::Object inputObj = input.As<Napi::Object>();
   std::shared_ptr<Configurable{{ cppClassName }}> output(new Configurable{{ cppClassName }}(nodegitContext));
 
   // unpack the data into the correct fields
@@ -160,17 +158,17 @@ nodegit::ConfigurableClassWrapper<{{ cppClassName }}Traits>::v8ConversionResult 
       {% if field.isClassType %}
         {% if field.cppClassName == 'GitOid' %}
           {
-            v8::Local<v8::Value> maybeOid = nodegit::safeGetField(inputObj, "{{ field.jsFunctionName }}");
-            if (!maybeOid.IsEmpty() && !maybeOid->IsUndefined() && !maybeOid->IsNull()) {
-              if (maybeOid->IsString()) {
-                Nan::Utf8String oidString(maybeOid.As<v8::String>());
-                if (git_oid_fromstr(&output->raw->{{ field.name }}, *oidString) != GIT_OK) {
+            Napi::Value maybeOid = nodegit::safeGetField(inputObj, "{{ field.jsFunctionName }}");
+            if (!maybeOid.IsUndefined() && !maybeOid.IsNull()) {
+              if (maybeOid.IsString()) {
+                std::string oidString = maybeOid.As<Napi::String>().Utf8Value();
+                if (git_oid_fromstr(&output->raw->{{ field.name }}, oidString.c_str()) != GIT_OK) {
                   return {
                     git_error_last()->message
                   };
                 }
-              } else if (maybeOid->IsObject()) {
-                if (git_oid_cpy(&output->raw->{{ field.name }}, Nan::ObjectWrap::Unwrap<{{ field.cppClassName }}>(maybeOid.As<v8::Object>())->GetValue()) != GIT_OK) {
+              } else if (maybeOid.IsObject()) {
+                if (git_oid_cpy(&output->raw->{{ field.name }}, Napi::ObjectWrap<{{ field.cppClassName }}>::Unwrap(maybeOid.As<Napi::Object>())->GetValue()) != GIT_OK) {
                   return {
                     git_error_last()->message
                   };
@@ -187,15 +185,15 @@ nodegit::ConfigurableClassWrapper<{{ cppClassName }}Traits>::v8ConversionResult 
           output->raw->{{ field.name }}.strings = nullptr;
 
           {
-            v8::Local<v8::Value> maybeStrarray = nodegit::safeGetField(inputObj, "{{ field.jsFunctionName }}");
-            if (!maybeStrarray.IsEmpty() && !maybeStrarray->IsUndefined() && !maybeStrarray->IsNull()) {
-              if (maybeStrarray->IsArray()) {
-                v8::Local<v8::Array> strarrayValue = maybeStrarray.As<v8::Array>();
+            Napi::Value maybeStrarray = nodegit::safeGetField(inputObj, "{{ field.jsFunctionName }}");
+            if (!maybeStrarray.IsUndefined() && !maybeStrarray.IsNull()) {
+              if (maybeStrarray.IsArray()) {
+                Napi::Array strarrayValue = maybeStrarray.As<Napi::Array>();
                 // validate the StrArray is indeed a list of strings
-                for (uint32_t i = 0; i < strarrayValue->Length(); ++i) {
+                for (uint32_t i = 0; i < strarrayValue.Length(); ++i) {
                   // TODO confirm that sparse array at least boils down to undefined
-                  v8::Local<v8::Value> arrayValue = Nan::Get(strarrayValue, i).ToLocalChecked();
-                  if (!arrayValue->IsString()) {
+                  Napi::Value arrayValue = strarrayValue.Get(i);
+                  if (!arrayValue.IsString()) {
                     return {
                       "Must pass String or Array of strings to {{ field.jsFunctionName }}"
                     };
@@ -203,8 +201,8 @@ nodegit::ConfigurableClassWrapper<{{ cppClassName }}Traits>::v8ConversionResult 
                 }
 
                 StrArrayConverter::ConvertInto(&output->raw->{{ field.name }}, strarrayValue);
-              } else if (maybeStrarray->IsString()) {
-                v8::Local<v8::String> strarrayValue = maybeStrarray.As<v8::String>();
+              } else if (maybeStrarray.IsString()) {
+                Napi::String strarrayValue = maybeStrarray.As<Napi::String>();
                 StrArrayConverter::ConvertInto(&output->raw->{{ field.name }}, strarrayValue);
               } else {
                 return {
@@ -215,67 +213,69 @@ nodegit::ConfigurableClassWrapper<{{ cppClassName }}Traits>::v8ConversionResult 
           }
         {% else %}
           {
-            v8::Local<v8::Value> maybeObject = nodegit::safeGetField(inputObj, "{{ field.jsFunctionName }}");
-            if (!maybeObject.IsEmpty() && !maybeObject->IsUndefined() && !maybeObject->IsNull()) {
-              if (!maybeObject->IsObject()) {
+            Napi::Value maybeObject = nodegit::safeGetField(inputObj, "{{ field.jsFunctionName }}");
+            if (!maybeObject.IsUndefined() && !maybeObject.IsNull()) {
+              if (!maybeObject.IsObject()) {
                 return {
                   "Must pass NodeGit.{{ field.jsClassName }} to {{ field.jsFunctionName }}"
                 };
               }
 
-              v8::Local<v8::Object> objectValue = maybeObject.As<v8::Object>();
-              output->raw->{{ field.name }} = Nan::ObjectWrap::Unwrap<{{ field.cppClassName }}>(objectValue)->GetValue();
+              Napi::Object objectValue = maybeObject.As<Napi::Object>();
+              output->raw->{{ field.name }} = Napi::ObjectWrap<{{ field.cppClassName }}>::Unwrap(objectValue)->GetValue();
               output->{{ field.jsFunctionName }}.Reset(objectValue);
             }
           }
         {% endif %}
       {% elsif field.isCallbackFunction %}
         {
-          v8::Local<v8::Value> maybeCallback = nodegit::safeGetField(inputObj, "{{ field.jsFunctionName }}");
-          if (!maybeCallback.IsEmpty() && !maybeCallback->IsUndefined() && !maybeCallback->IsNull()) {
-            if (!maybeCallback->IsFunction() && !maybeCallback->IsObject()) {
+          Napi::Value maybeCallback = nodegit::safeGetField(inputObj, "{{ field.jsFunctionName }}");
+          if (!maybeCallback.IsUndefined() && !maybeCallback.IsNull()) {
+            if (!maybeCallback.IsFunction() && !maybeCallback.IsObject()) {
               return {
                 "Must pass Function or CallbackSpecifier to {{ field.jsFunctionName}}"
               };
             }
 
-            std::unique_ptr<Nan::Callback> callback;
+            std::unique_ptr<Napi::FunctionReference> callback;
             uint32_t throttle = {% if field.return.throttle %}{{ field.return.throttle }}{% else %}0{% endif %};
             bool waitForResult = true;
 
-            if (maybeCallback->IsFunction()) {
-              callback.reset(new Nan::Callback(maybeCallback.As<v8::Function>()));
+            if (maybeCallback.IsFunction()) {
+              callback.reset(new Napi::FunctionReference());
+              *callback = Napi::Persistent(maybeCallback.As<Napi::Function>());
             } else {
-              v8::Local<v8::Object> callbackSpecifier = maybeCallback.As<v8::Object>();
-              v8::Local<v8::Value> maybeCallback = nodegit::safeGetField(callbackSpecifier, "callback");
-              if (maybeCallback.IsEmpty() || !maybeCallback->IsFunction()) {
+              Napi::Object callbackSpecifier = maybeCallback.As<Napi::Object>();
+              Napi::Value maybeCallback = nodegit::safeGetField(callbackSpecifier, "callback");
+              if (maybeCallback.IsUndefined() || !maybeCallback.IsFunction()) {
                 return {
                   "Must pass callback to CallbackSpecifier"
                 };
               }
 
-              callback.reset(new Nan::Callback(maybeCallback.As<v8::Function>()));
+              callback.reset(new Napi::FunctionReference());
+              *callback = Napi::Persistent(maybeCallback.As<Napi::Function>());
 
-              v8::Local<v8::Value> maybeThrottle = nodegit::safeGetField(callbackSpecifier, "throttle");
-              if (!maybeThrottle.IsEmpty() && !maybeThrottle->IsUndefined() && !maybeThrottle->IsNull()) {
-                if (!maybeThrottle->IsNumber()) {
+              Napi::Value maybeThrottle = nodegit::safeGetField(callbackSpecifier, "throttle");
+              if (!maybeThrottle.IsUndefined() && !maybeThrottle.IsNull()) {
+                if (!maybeThrottle.IsNumber()) {
                   return {
                     "Must pass zero or positive number as throttle to CallbackSpecifier"
                   };
                 }
 
-                throttle = maybeThrottle->Uint32Value(Nan::GetCurrentContext()).FromJust();
+                throttle = maybeThrottle.As<Napi::Number>().Uint32Value();
               }
 
-              v8::Local<v8::Value> maybeWaitForResult = nodegit::safeGetField(callbackSpecifier, "waitForResult");
-              if (!maybeWaitForResult.IsEmpty() && !maybeWaitForResult->IsUndefined() && !maybeWaitForResult->IsNull()) {
-                if (!maybeWaitForResult->IsBoolean()) {
+              Napi::Value maybeWaitForResult = nodegit::safeGetField(callbackSpecifier, "waitForResult");
+              if (!maybeWaitForResult.IsUndefined() && !maybeWaitForResult.IsNull()) {
+                if (!maybeWaitForResult.IsBoolean()) {
                   return {
                     "Must pass a boolean as waitForResult to callbackSpecifier"
                   };
                 }
 
-                waitForResult = Nan::To<bool>(maybeWaitForResult).FromJust();
+                waitForResult = maybeWaitForResult.As<Napi::Boolean>().Value();
               }
             }
 
@@ -285,8 +285,8 @@ nodegit::ConfigurableClassWrapper<{{ cppClassName }}Traits>::v8ConversionResult 
         }
       {% elsif field.isStructType %}
         {
-          v8::Local<v8::Value> maybeNestedObject = nodegit::safeGetField(inputObj, "{{ field.jsFunctionName }}");
-          if (!maybeNestedObject.IsEmpty() && !maybeNestedObject->IsUndefined() && !maybeNestedObject->IsNull()) {
+          Napi::Value maybeNestedObject = nodegit::safeGetField(inputObj, "{{ field.jsFunctionName }}");
+          if (!maybeNestedObject.IsUndefined() && !maybeNestedObject.IsNull()) {
             auto conversionResult = Configurable{{ field.cppClassName }}::fromJavascript(nodegitContext, maybeNestedObject);
             if (!conversionResult.result) {
               std::string error = "Failed to set {{ field.jsFunctionName }}: ";
@@ -306,42 +306,42 @@ nodegit::ConfigurableClassWrapper<{{ cppClassName }}Traits>::v8ConversionResult 
       {% elsif field.cppClassName == 'String' %}
         output->raw->{{ field.name }} = nullptr;
         {
-          v8::Local<v8::Value> maybeString = nodegit::safeGetField(inputObj, "{{ field.jsFunctionName }}");
-          if (!maybeString.IsEmpty() && !maybeString->IsUndefined() && !maybeString->IsNull()) {
-            if (!maybeString->IsString()) {
+          Napi::Value maybeString = nodegit::safeGetField(inputObj, "{{ field.jsFunctionName }}");
+          if (!maybeString.IsUndefined() && !maybeString.IsNull()) {
+            if (!maybeString.IsString()) {
               return {
                 "Must pass string to {{ field.jsFunctionName }}"
               };
             }
 
-            Nan::Utf8String utf8String(maybeString.As<v8::String>());
-            output->raw->{{ field.name }} = strdup(*utf8String);
+            std::string utf8String = maybeString.As<Napi::String>().Utf8Value();
+            output->raw->{{ field.name }} = strdup(utf8String.c_str());
           }
         }
       {% elsif field.isCppClassIntType %}
         {
-          v8::Local<v8::Value> maybeNumber = nodegit::safeGetField(inputObj, "{{ field.jsFunctionName }}");
-          if (!maybeNumber.IsEmpty() && !maybeNumber->IsUndefined() && !maybeNumber->IsNull()) {
-            if (!maybeNumber->IsNumber()) {
+          Napi::Value maybeNumber = nodegit::safeGetField(inputObj, "{{ field.jsFunctionName }}");
+          if (!maybeNumber.IsUndefined() && !maybeNumber.IsNull()) {
+            if (!maybeNumber.IsNumber()) {
               return {
                 "Must pass {{ field.cppClassName }} to {{ field.jsFunctionName }}"
               };
             }
 
-            output->raw->{{ field.name }} = maybeNumber->{{ field.cppClassName }}Value();
+            output->raw->{{ field.name }} = maybeNumber.As<Napi::Number>().{{ field.cppClassName }}Value();
           }
         }
       {% else %}
         {
-          v8::Local<v8::Value> maybeNumber = nodegit::safeGetField(inputObj, "{{ field.jsFunctionName }}");
-          if (!maybeNumber.IsEmpty() && !maybeNumber->IsUndefined() && !maybeNumber->IsNull()) {
-            if (!maybeNumber->IsNumber()) {
+          Napi::Value maybeNumber = nodegit::safeGetField(inputObj, "{{ field.jsFunctionName }}");
+          if (!maybeNumber.IsUndefined() && !maybeNumber.IsNull()) {
+            if (!maybeNumber.IsNumber()) {
               return {
                 "Must pass Int32 to {{ field.jsFunctionName }}"
               };
             }
 
-            output->raw->{{ field.name }} = static_cast<{{ field.cType }}>(maybeNumber->Int32Value(Nan::GetCurrentContext()).FromJust());
+            output->raw->{{ field.name }} = static_cast<{{ field.cType }}>(maybeNumber.As<Napi::Number>().Int32Value());
           }
         }
       {% endif %}

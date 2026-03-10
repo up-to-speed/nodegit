@@ -1,11 +1,12 @@
 {% each fields|fieldsInfo as field %}
   {% if not field.ignore %}
     // start field block
-    NAN_METHOD({{ cppClassName }}::{{ field.cppFunctionName }}) {
-      v8::Local<v8::Value> v8ConversionSlot;
+    Napi::Value {{ cppClassName }}::{{ field.cppFunctionName }}(const Napi::CallbackInfo& info) {
+      Napi::Env env = info.Env();
+      Napi::Value v8ConversionSlot;
 
       {% if field | isFixedLengthString %}
-      char* {{ field.name }} = (char *)Nan::ObjectWrap::Unwrap<{{ cppClassName }}>(info.This())->GetValue()->{{ field.name }};
+      char* {{ field.name }} = (char *)Napi::ObjectWrap<{{ cppClassName }}>::Unwrap(info.This().As<Napi::Object>())->GetValue()->{{ field.name }};
       {% else %}
         {% if field.cType|isArrayType %}
           {{ field.cType|arrayTypeToPlainType }} *{{ field.name }} =
@@ -21,11 +22,11 @@
             {% endif %}
           {% endif %}
         {% endif %}
-        Nan::ObjectWrap::Unwrap<{{ cppClassName }}>(info.This())->GetValue()->{{ field.name }};
+        Napi::ObjectWrap<{{ cppClassName }}>::Unwrap(info.This().As<Napi::Object>())->GetValue()->{{ field.name }};
       {% endif %}
 
       {% partial convertToV8 field %}
-      info.GetReturnValue().Set(v8ConversionSlot);
+      return v8ConversionSlot;
     }
     // end field block
   {% endif %}

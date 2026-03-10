@@ -1,16 +1,12 @@
-#ifndef STR_ARRAY_H
-#define STR_ARRAY_H
+#ifndef GIT_BUF_CONVERTER_H
+#define GIT_BUF_CONVERTER_H
 
-#include <v8.h>
-
-#include "nan.h"
+#include <napi.h>
 #include "git2/buffer.h"
-
-using namespace v8;
 
 class GitBufConverter {
   public:
-    static git_buf *Convert(v8::Local<v8::Value> val);
+    static git_buf *Convert(Napi::Value val);
 };
 
 #endif

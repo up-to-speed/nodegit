@@ -1,7 +1,8 @@
-#ifndef NODEGIT_WRAPPER_H
-#define NODEGIT_WRAPPER_H
+#ifndef BUNGIT_WRAPPER_H
+#define BUNGIT_WRAPPER_H
 
 #include <algorithm>
+#include <cassert>
 #include <unordered_map>
 
 #include <napi.h>

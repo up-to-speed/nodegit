@@ -16,7 +16,7 @@
 
   "targets": [
     {
-      "target_name": "nodegit",
+      "target_name": "bungit",
 
       "dependencies": [
         "vendor/libgit2.gyp:libgit2"
@@ -31,7 +31,7 @@
         "src/lock_master.cc",
         "src/reference_counter.cc",
         "src/thread_pool.cc",
-        "src/nodegit.cc",
+        "src/bungit.cc",
         "src/init_ssh2.cc",
         "src/promise_completion.cc",
         "src/wrapper.cc",
@@ -54,9 +54,13 @@
       ],
 
       "include_dirs": [
-        "vendor/libv8-convert",
         "vendor/libssh2/include",
-        "<!(node -e \"require('nan')\")"
+        "<!(node -p \"require('node-addon-api').include_dir\")"
+      ],
+
+      "defines": [
+        "NAPI_VERSION=8",
+        "NODE_ADDON_API_DISABLE_DEPRECATED"
       ],
 
       "cflags": [

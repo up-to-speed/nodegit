@@ -1,5 +1,5 @@
-#ifndef NODEGIT_H
-#define NODEGIT_H
+#ifndef BUNGIT_H
+#define BUNGIT_H
 
 #include <napi.h>
 

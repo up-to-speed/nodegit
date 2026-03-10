@@ -1,40 +1,45 @@
 // Manual binding for git_odb_add_backend, exposed as Odb.prototype.addMempackBackend()
 // The first argument (backend) must be a Mempack object wrapping a git_odb_backend*.
 
-NAN_METHOD(GitOdb::AddMempackBackend) {
+Napi::Value GitOdb::AddMempackBackend(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
   if (info.Length() < 3) {
-    return Nan::ThrowError("Backend, priority, and callback arguments are required.");
+    Napi::Error::New(env, "Backend, priority, and callback arguments are required.").ThrowAsJavaScriptException();
+    return env.Undefined();
   }
 
-  if (!info[info.Length() - 1]->IsFunction()) {
-    return Nan::ThrowError("Callback is required and must be a Function.");
+  if (!info[info.Length() - 1].IsFunction()) {
+    Napi::Error::New(env, "Callback is required and must be a Function.").ThrowAsJavaScriptException();
+    return env.Undefined();
   }
 
   AddMempackBackendBaton *baton = new AddMempackBackendBaton();
   baton->error_code = GIT_OK;
   baton->error = NULL;
-  baton->odb = Nan::ObjectWrap::Unwrap<GitOdb>(info.This())->GetValue();
+  baton->odb = Napi::ObjectWrap<GitOdb>::Unwrap(info.This().As<Napi::Object>())->GetValue();
 
   // Validate and extract git_odb_backend* from the Mempack wrapper
-  if (!info[0]->IsObject() || info[0]->IsNull() || info[0]->IsUndefined()) {
+  if (!info[0].IsObject() || info[0].IsNull() || info[0].IsUndefined()) {
     delete baton;
-    return Nan::ThrowTypeError("First argument must be a Mempack object.");
+    Napi::TypeError::New(env, "First argument must be a Mempack object.").ThrowAsJavaScriptException();
+    return env.Undefined();
   }
-  baton->backend = Nan::ObjectWrap::Unwrap<GitMempack>(Nan::To<v8::Object>(info[0]).ToLocalChecked())->GetValue();
+  baton->backend = Napi::ObjectWrap<GitMempack>::Unwrap(info[0].As<Napi::Object>())->GetValue();
 
   // Priority is required and must be a number
-  if (!info[1]->IsNumber()) {
+  if (!info[1].IsNumber()) {
     delete baton;
-    return Nan::ThrowTypeError("Second argument (priority) must be a number.");
+    Napi::TypeError::New(env, "Second argument (priority) must be a number.").ThrowAsJavaScriptException();
+    return env.Undefined();
   }
-  baton->priority = (int)Nan::To<int32_t>(info[1]).FromJust();
+  baton->priority = info[1].As<Napi::Number>().Int32Value();
 
-  Nan::Callback *callback =
-      new Nan::Callback(v8::Local<Function>::Cast(info[info.Length() - 1]));
+  Napi::FunctionReference callback;
+  callback = Napi::Persistent(info[info.Length() - 1].As<Napi::Function>());
   std::map<std::string, std::shared_ptr<nodegit::CleanupHandle>> cleanupHandles;
-  AddMempackBackendWorker *worker = new AddMempackBackendWorker(baton, callback, cleanupHandles);
+  AddMempackBackendWorker *worker = new AddMempackBackendWorker(baton, std::move(callback), cleanupHandles);
 
-  worker->Reference<GitOdb>("odb", info.This());
+  worker->Reference<GitOdb>("odb", info.This().As<Napi::Object>());
   worker->Reference("backend", info[0]);
 
   // Store a reference from the backend to the ODB to prevent the ODB from
@@ -42,12 +47,12 @@ NAN_METHOD(GitOdb::AddMempackBackend) {
   // because after git_odb_add_backend, libgit2 owns the backend pointer and
   // will free it when the ODB is freed. If the ODB is GC'd first, the
   // backend's pointer becomes dangling.
-  Nan::Set(Nan::To<v8::Object>(info[0]).ToLocalChecked(),
-           Nan::New("_parentOdb").ToLocalChecked(), info.This());
+  info[0].As<Napi::Object>().Set(
+    Napi::String::New(env, "_parentOdb"), info.This());
 
-  nodegit::Context *nodegitContext = reinterpret_cast<nodegit::Context *>(info.Data().As<External>()->Value());
+  nodegit::Context *nodegitContext = nodegit::Context::GetCurrentContext(env);
   nodegitContext->QueueWorker(worker);
-  return;
+  return env.Undefined();
 }
 
 nodegit::LockMaster GitOdb::AddMempackBackendWorker::AcquireLocks() {
@@ -78,35 +83,37 @@ void GitOdb::AddMempackBackendWorker::HandleErrorCallback() {
 }
 
 void GitOdb::AddMempackBackendWorker::HandleOKCallback() {
+  Napi::Env env = Env();
+
   if (baton->error_code == GIT_OK) {
-    v8::Local<v8::Value> argv[2] = {Nan::Null(), Nan::New(baton->error_code)};
-    callback->Call(2, argv, async_resource);
+    napi_value argv[2] = {env.Null(), Napi::Number::New(env, baton->error_code)};
+    callback.Call(env.Undefined(), 2, argv);
   } else if (baton->error) {
-    v8::Local<v8::Object> err;
+    Napi::Object err;
     if (baton->error->message) {
-      err = Nan::To<v8::Object>(Nan::Error(baton->error->message)).ToLocalChecked();
+      err = Napi::Error::New(env, baton->error->message).Value().As<Napi::Object>();
     } else {
-      err = Nan::To<v8::Object>(Nan::Error("Method addMempackBackend has thrown an error.")).ToLocalChecked();
+      err = Napi::Error::New(env, "Method addMempackBackend has thrown an error.").Value().As<Napi::Object>();
     }
-    Nan::Set(err, Nan::New("errno").ToLocalChecked(), Nan::New(baton->error_code));
-    Nan::Set(err, Nan::New("errorFunction").ToLocalChecked(),
-             Nan::New("Odb.addMempackBackend").ToLocalChecked());
-    v8::Local<v8::Value> argv[1] = {err};
-    callback->Call(1, argv, async_resource);
+    err.Set(Napi::String::New(env, "errno"), Napi::Number::New(env, baton->error_code));
+    err.Set(Napi::String::New(env, "errorFunction"),
+             Napi::String::New(env, "Odb.addMempackBackend"));
+    napi_value argv[1] = {err};
+    callback.Call(env.Undefined(), 1, argv);
     if (baton->error->message)
       free((void *)baton->error->message);
     free((void *)baton->error);
   } else if (baton->error_code < 0) {
-    v8::Local<v8::Object> err =
-        Nan::To<v8::Object>(Nan::Error("Method addMempackBackend has thrown an error.")).ToLocalChecked();
-    Nan::Set(err, Nan::New("errno").ToLocalChecked(),
-             Nan::New(baton->error_code));
-    Nan::Set(err, Nan::New("errorFunction").ToLocalChecked(),
-             Nan::New("Odb.addMempackBackend").ToLocalChecked());
-    v8::Local<v8::Value> argv[1] = {err};
-    callback->Call(1, argv, async_resource);
+    Napi::Object err =
+        Napi::Error::New(env, "Method addMempackBackend has thrown an error.").Value().As<Napi::Object>();
+    err.Set(Napi::String::New(env, "errno"),
+             Napi::Number::New(env, baton->error_code));
+    err.Set(Napi::String::New(env, "errorFunction"),
+             Napi::String::New(env, "Odb.addMempackBackend"));
+    napi_value argv[1] = {err};
+    callback.Call(env.Undefined(), 1, argv);
   } else {
-    callback->Call(0, NULL, async_resource);
+    callback.Call({});
   }
 
   delete baton;

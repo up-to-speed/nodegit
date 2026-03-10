@@ -1,67 +1,69 @@
-#include <nan.h>
+#include <napi.h>
 #include <string.h>
 
 extern "C" {
   #include <git2.h>
 }
 
-#include "../include/nodegit.h"
+#include "../include/bungit.h"
 #include "../include/cleanup_handle.h"
 #include "../include/context.h"
 #include "../include/lock_master.h"
 #include "../include/functions/copy.h"
 #include "../include/filter_registry.h"
-#include "nodegit_wrapper.cc"
+#include "bungit_wrapper.cc"
 
 #include "../include/filter.h"
 
 using namespace std;
-using namespace v8;
-using namespace node;
 
-void GitFilterRegistry::InitializeComponent(v8::Local<v8::Object> target, nodegit::Context *nodegitContext) {
-  Nan::HandleScope scope;
+void GitFilterRegistry::InitializeComponent(Napi::Object target, nodegit::Context *nodegitContext) {
+  Napi::Env env = target.Env();
 
-  v8::Local<Object> filterRegistry = Nan::New<Object>();
+  Napi::Object filterRegistry = Napi::Object::New(env);
 
-  Local<External> nodegitExternal = Nan::New<External>(nodegitContext);
-  Nan::SetMethod(filterRegistry, "register", GitFilterRegister, nodegitExternal);
-  Nan::SetMethod(filterRegistry, "unregister", GitFilterUnregister, nodegitExternal);
+  filterRegistry.Set("register", Napi::Function::New(env, GitFilterRegister));
+  filterRegistry.Set("unregister", Napi::Function::New(env, GitFilterUnregister));
 
-  Nan::Set(target, Nan::New<String>("FilterRegistry").ToLocalChecked(), filterRegistry);
+  target.Set("FilterRegistry", filterRegistry);
   nodegitContext->SaveToPersistent("FilterRegistry", filterRegistry);
   std::shared_ptr<nodegit::FilterRegistryCleanupHandles> filterRegistryCleanupHandles(new nodegit::FilterRegistryCleanupHandles);
   nodegitContext->SaveCleanupHandle("filterRegistry", filterRegistryCleanupHandles);
 }
 
-NAN_METHOD(GitFilterRegistry::GitFilterRegister) {
-  Nan::EscapableHandleScope scope;
+Napi::Value GitFilterRegistry::GitFilterRegister(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
 
-  if (info.Length() == 0 || !info[0]->IsString()) {
-    return Nan::ThrowError("String name is required.");
+  if (info.Length() == 0 || !info[0].IsString()) {
+    Napi::Error::New(env, "String name is required.").ThrowAsJavaScriptException();
+    return env.Undefined();
   }
 
-  if (info.Length() == 1 || !info[1]->IsObject()) {
-    return Nan::ThrowError("Filter filter is required.");
+  if (info.Length() == 1 || !info[1].IsObject()) {
+    Napi::Error::New(env, "Filter filter is required.").ThrowAsJavaScriptException();
+    return env.Undefined();
   }
 
-  if (info.Length() == 2 || !info[2]->IsNumber()) {
-    return Nan::ThrowError("Number priority is required.");
+  if (info.Length() == 2 || !info[2].IsNumber()) {
+    Napi::Error::New(env, "Number priority is required.").ThrowAsJavaScriptException();
+    return env.Undefined();
   }
 
-  if (info.Length() == 3 || !info[3]->IsFunction()) {
-    return Nan::ThrowError("Callback is required and must be a Function.");
+  if (info.Length() == 3 || !info[3].IsFunction()) {
+    Napi::Error::New(env, "Callback is required and must be a Function.").ThrowAsJavaScriptException();
+    return env.Undefined();
   }
 
   FilterRegisterBaton *baton = new FilterRegisterBaton();
-  nodegit::Context *nodegitContext = reinterpret_cast<nodegit::Context *>(info.Data().As<External>()->Value());
+  nodegit::Context *nodegitContext = nodegit::Context::GetCurrentContext();
   std::map<std::string, std::shared_ptr<nodegit::CleanupHandle>> cleanupHandles;
 
   {
     auto conversionResult = ConfigurableGitFilter::fromJavascript(nodegitContext, info[1]);
     if (!conversionResult.result) {
       delete baton;
-      return Nan::ThrowError(Nan::New(conversionResult.error).ToLocalChecked());
+      Napi::Error::New(env, conversionResult.error).ThrowAsJavaScriptException();
+      return env.Undefined();
     }
 
     auto convertedObject = conversionResult.result;
@@ -69,23 +71,24 @@ NAN_METHOD(GitFilterRegistry::GitFilterRegister) {
     baton->filter = convertedObject->GetValue();
   }
 
-  Nan::Utf8String name(Nan::To<v8::String>(info[0]).ToLocalChecked());
+  std::string name = info[0].As<Napi::String>().Utf8Value();
 
   baton->filter_name = (char *)malloc(name.length() + 1);
-  memcpy((void *)baton->filter_name, *name, name.length());
+  memcpy((void *)baton->filter_name, name.c_str(), name.length());
   memset((void *)(((char *)baton->filter_name) + name.length()), 0, 1);
 
   baton->error_code = GIT_OK;
-  baton->filter_priority = Nan::To<int>(info[2]).FromJust();
+  baton->filter_priority = info[2].As<Napi::Number>().Int32Value();
 
-  Nan::Callback *callback = new Nan::Callback(Local<Function>::Cast(info[3]));
-  RegisterWorker *worker = new RegisterWorker(baton, callback, cleanupHandles);
+  Napi::FunctionReference callback;
+  callback.Reset(info[3].As<Napi::Function>());
+  RegisterWorker *worker = new RegisterWorker(baton, std::move(callback), cleanupHandles);
 
   worker->Reference("filter_name", info[0]);
   worker->Reference("filter_priority", info[2]);
 
   nodegitContext->QueueWorker(worker);
-  return;
+  return env.Undefined();
 }
 
 nodegit::LockMaster GitFilterRegistry::RegisterWorker::AcquireLocks() {
@@ -120,43 +123,44 @@ void GitFilterRegistry::RegisterWorker::HandleErrorCallback() {
 }
 
 void GitFilterRegistry::RegisterWorker::HandleOKCallback() {
+  Napi::Env env = Env();
   if (baton->error_code == GIT_OK) {
     static_pointer_cast<nodegit::FilterRegistryCleanupHandles>(nodegit::Context::GetCurrentContext()->GetCleanupHandle("filterRegistry"))->registeredFilters[baton->filter_name] = cleanupHandles["filter"];
-    v8::Local<v8::Value> result = Nan::New(baton->error_code);
-    v8::Local<v8::Value> argv[2] = {
-      Nan::Null(),
+    Napi::Value result = Napi::Number::New(env, baton->error_code);
+    napi_value argv[2] = {
+      env.Null(),
       result
     };
-    callback->Call(2, argv, async_resource);
+    callback.Call(env.Undefined(), 2, argv);
   }
   else if (baton->error) {
-    v8::Local<v8::Object> err;
+    Napi::Object err;
     if (baton->error->message) {
-      err = Nan::To<v8::Object>(Nan::Error(baton->error->message)).ToLocalChecked();
+      err = Napi::Error::New(env, baton->error->message).Value().As<Napi::Object>();
     } else {
-      err = Nan::To<v8::Object>(Nan::Error("Method register has thrown an error.")).ToLocalChecked();
+      err = Napi::Error::New(env, "Method register has thrown an error.").Value().As<Napi::Object>();
     }
-    Nan::Set(err, Nan::New("errno").ToLocalChecked(), Nan::New(baton->error_code));
-    Nan::Set(err, Nan::New("errorFunction").ToLocalChecked(), Nan::New("FilterRegistry.register").ToLocalChecked());
-    v8::Local<v8::Value> argv[1] = {
+    err.Set("errno", Napi::Number::New(env, baton->error_code));
+    err.Set("errorFunction", Napi::String::New(env, "FilterRegistry.register"));
+    napi_value argv[1] = {
       err
     };
-    callback->Call(1, argv, async_resource);
+    callback.Call(env.Undefined(), 1, argv);
     if (baton->error->message)
       free((void *)baton->error->message);
     free((void *)baton->error);
   }
   else if (baton->error_code < 0) {
-    v8::Local<v8::Object> err = Nan::To<v8::Object>(Nan::Error("Method register has thrown an error.")).ToLocalChecked();
-    Nan::Set(err, Nan::New("errno").ToLocalChecked(), Nan::New(baton->error_code));
-    Nan::Set(err, Nan::New("errorFunction").ToLocalChecked(), Nan::New("FilterRegistry.register").ToLocalChecked());
-    v8::Local<v8::Value> argv[1] = {
+    Napi::Object err = Napi::Error::New(env, "Method register has thrown an error.").Value().As<Napi::Object>();
+    err.Set("errno", Napi::Number::New(env, baton->error_code));
+    err.Set("errorFunction", Napi::String::New(env, "FilterRegistry.register"));
+    napi_value argv[1] = {
       err
     };
-    callback->Call(1, argv, async_resource);
+    callback.Call(env.Undefined(), 1, argv);
   }
   else {
-    callback->Call(0, NULL, async_resource);
+    callback.Call({});
   }
 
   free(baton->filter_name);
@@ -164,33 +168,36 @@ void GitFilterRegistry::RegisterWorker::HandleOKCallback() {
   delete baton;
 }
 
-NAN_METHOD(GitFilterRegistry::GitFilterUnregister) {
-  Nan::EscapableHandleScope scope;
+Napi::Value GitFilterRegistry::GitFilterUnregister(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
 
-  if (info.Length() == 0 || !info[0]->IsString()) {
-    return Nan::ThrowError("String name is required.");
+  if (info.Length() == 0 || !info[0].IsString()) {
+    Napi::Error::New(env, "String name is required.").ThrowAsJavaScriptException();
+    return env.Undefined();
   }
 
-  if (info.Length() == 1 || !info[1]->IsFunction()) {
-    return Nan::ThrowError("Callback is required and must be a Function.");
+  if (info.Length() == 1 || !info[1].IsFunction()) {
+    Napi::Error::New(env, "Callback is required and must be a Function.").ThrowAsJavaScriptException();
+    return env.Undefined();
   }
 
   FilterUnregisterBaton *baton = new FilterUnregisterBaton();
-  Nan::Utf8String name(Nan::To<v8::String>(info[0]).ToLocalChecked());
+  std::string name = info[0].As<Napi::String>().Utf8Value();
 
   baton->filter_name = (char *)malloc(name.length() + 1);
-  memcpy((void *)baton->filter_name, *name, name.length());
+  memcpy((void *)baton->filter_name, name.c_str(), name.length());
   memset((void *)(((char *)baton->filter_name) + name.length()), 0, 1);
 
   baton->error_code = GIT_OK;
 
   /* Setting up Async Worker */
-  Nan::Callback *callback = new Nan::Callback(Local<Function>::Cast(info[1]));
-  UnregisterWorker *worker = new UnregisterWorker(baton, callback);
+  Napi::FunctionReference callback;
+  callback.Reset(info[1].As<Napi::Function>());
+  UnregisterWorker *worker = new UnregisterWorker(baton, std::move(callback));
 
-  nodegit::Context *nodegitContext = reinterpret_cast<nodegit::Context *>(info.Data().As<External>()->Value());
+  nodegit::Context *nodegitContext = nodegit::Context::GetCurrentContext();
   nodegitContext->QueueWorker(worker);
-  return;
+  return env.Undefined();
 }
 
 nodegit::LockMaster GitFilterRegistry::UnregisterWorker::AcquireLocks() {
@@ -225,43 +232,44 @@ void GitFilterRegistry::UnregisterWorker::HandleErrorCallback() {
 }
 
 void GitFilterRegistry::UnregisterWorker::HandleOKCallback() {
+  Napi::Env env = Env();
   if (baton->error_code == GIT_OK) {
     static_pointer_cast<nodegit::FilterRegistryCleanupHandles>(nodegit::Context::GetCurrentContext()->GetCleanupHandle("filterRegistry"))->registeredFilters.erase(baton->filter_name);
-    v8::Local<v8::Value> result = Nan::New(baton->error_code);
-    v8::Local<v8::Value> argv[2] = {
-      Nan::Null(),
+    Napi::Value result = Napi::Number::New(env, baton->error_code);
+    napi_value argv[2] = {
+      env.Null(),
       result
     };
-    callback->Call(2, argv, async_resource);
+    callback.Call(env.Undefined(), 2, argv);
   }
   else if (baton->error) {
-    v8::Local<v8::Object> err;
+    Napi::Object err;
     if (baton->error->message) {
-      err = Nan::To<v8::Object>(Nan::Error(baton->error->message)).ToLocalChecked();
+      err = Napi::Error::New(env, baton->error->message).Value().As<Napi::Object>();
     } else {
-      err = Nan::To<v8::Object>(Nan::Error("Method register has thrown an error.")).ToLocalChecked();
+      err = Napi::Error::New(env, "Method register has thrown an error.").Value().As<Napi::Object>();
     }
-    Nan::Set(err, Nan::New("errno").ToLocalChecked(), Nan::New(baton->error_code));
-    Nan::Set(err, Nan::New("errorFunction").ToLocalChecked(), Nan::New("FilterRegistry.unregister").ToLocalChecked());
-    v8::Local<v8::Value> argv[1] = {
+    err.Set("errno", Napi::Number::New(env, baton->error_code));
+    err.Set("errorFunction", Napi::String::New(env, "FilterRegistry.unregister"));
+    napi_value argv[1] = {
       err
     };
-    callback->Call(1, argv, async_resource);
+    callback.Call(env.Undefined(), 1, argv);
     if (baton->error->message)
       free((void *)baton->error->message);
     free((void *)baton->error);
   }
   else if (baton->error_code < 0) {
-    v8::Local<v8::Object> err = Nan::To<v8::Object>(Nan::Error("Method unregister has thrown an error.")).ToLocalChecked();
-    Nan::Set(err, Nan::New("errno").ToLocalChecked(), Nan::New(baton->error_code));
-    Nan::Set(err, Nan::New("errorFunction").ToLocalChecked(), Nan::New("FilterRegistry.unregister").ToLocalChecked());
-    v8::Local<v8::Value> argv[1] = {
+    Napi::Object err = Napi::Error::New(env, "Method unregister has thrown an error.").Value().As<Napi::Object>();
+    err.Set("errno", Napi::Number::New(env, baton->error_code));
+    err.Set("errorFunction", Napi::String::New(env, "FilterRegistry.unregister"));
+    napi_value argv[1] = {
       err
     };
-    callback->Call(1, argv, async_resource);
+    callback.Call(env.Undefined(), 1, argv);
   }
   else {
-    callback->Call(0, NULL, async_resource);
+    callback.Call({});
   }
 
   free(baton->filter_name);

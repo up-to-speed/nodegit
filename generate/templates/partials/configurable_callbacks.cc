@@ -71,12 +71,13 @@
       }
 
       void Configurable{{ cppClassName }}::{{ field.jsFunctionName }}_async(void *untypedBaton) {
-        Nan::HandleScope scope;
-
         {{ field.name|titleCase }}Baton* baton = static_cast<{{ field.name|titleCase }}Baton*>(untypedBaton);
         Configurable{{ cppClassName }}* instance = {{ field.jsFunctionName }}_getInstanceFromBaton(baton);
 
-        if (instance->{{ field.jsFunctionName }}.GetCallback()->IsEmpty()) {
+        Napi::Env env = instance->nodegitContext->GetEnv();
+        Napi::HandleScope scope(env);
+
+        if (!instance->{{ field.jsFunctionName }}.HasCallback()) {
           {% if field.return.type == "int" %}
             baton->result = baton->defaultResult; // no results acquired
           {% endif %}
@@ -86,49 +87,52 @@
 
         {% each field.args|callbackArgsInfo as arg %}
         {% if arg.cppClassName == "Array" %}
-          v8::Local<v8::Array> _{{arg.name}}_array = Nan::New<v8::Array>(baton->{{ arg.arrayLengthArgumentName }});
-          for(uint32_t i = 0; i < _{{arg.name}}_array->Length(); i++) {
-            Nan::Set(_{{arg.name}}_array, i, {{arg.arrayElementCppClassName}}::New(baton->{{arg.name}}[i], false));
+          Napi::Array _{{arg.name}}_array = Napi::Array::New(env, baton->{{ arg.arrayLengthArgumentName }});
+          for(uint32_t i = 0; i < _{{arg.name}}_array.Length(); i++) {
+            _{{arg.name}}_array.Set(i, {{arg.arrayElementCppClassName}}::New(env, baton->{{arg.name}}[i], false));
           }
         {% endif %}
         {% endeach %}
 
         {% if field.args|callbackArgsCount == 0 %}
-          v8::Local<v8::Value> *argv = NULL;
+          Napi::Value *argv = NULL;
         {% else %}
-          v8::Local<v8::Value> argv[{{ field.args|callbackArgsCount }}] = {
+          Napi::Value argv[{{ field.args|callbackArgsCount }}] = {
             {% each field.args|callbackArgsInfo as arg %}
             {% if not arg.firstArg %},{% endif %}
             {% if arg.isEnum %}
-              Nan::New((int)baton->{{ arg.name }})
+              Napi::Number::New(env, (int)baton->{{ arg.name }})
             {% elsif arg.cppClassName == "Array" %}
               _{{arg.name}}_array
             {% elsif arg.isLibgitType %}
-              {{ arg.cppClassName }}::New(baton->{{ arg.name }}, false)
+              {{ arg.cppClassName }}::New(env, baton->{{ arg.name }}, false)
             {% elsif arg.cType == "size_t" %}
-              // HACK: NAN should really have an overload for Nan::New to support size_t
-              Nan::New((unsigned int)baton->{{ arg.name }})
+              // HACK: size_t needs explicit cast
+              Napi::Number::New(env, (unsigned int)baton->{{ arg.name }})
             {% elsif arg.cppClassName == "String" %}
               baton->{{ arg.name }} == NULL
-                ? Nan::EmptyString()
-                : Nan::New({%if arg.cType | isDoublePointer %}*{% endif %}baton->{{ arg.name }}).ToLocalChecked()
+                ? Napi::String::New(env, "")
+                : Napi::String::New(env, {%if arg.cType | isDoublePointer %}*{% endif %}baton->{{ arg.name }})
             {% else %}
-              Nan::New(baton->{{ arg.name }})
+              Napi::Number::New(env, baton->{{ arg.name }})
             {% endif %}
             {% endeach %}
           };
         {% endif %}
 
-        Nan::TryCatch tryCatch;
-
-        Nan::MaybeLocal<v8::Value> maybeResult = (*(instance->{{ field.jsFunctionName }}.GetCallback()))(
-          baton->GetAsyncResource(),
-          {{ field.args|callbackArgsCount }},
-          argv
-        );
-        v8::Local<v8::Value> result;
-        if (!maybeResult.IsEmpty()) {
-          result = maybeResult.ToLocalChecked();
+        Napi::Value result;
+        try {
+          {% if field.args|callbackArgsCount == 0 %}
+          result = instance->{{ field.jsFunctionName }}.GetCallback()->Call({});
+          {% else %}
+          napi_value napi_argv[{{ field.args|callbackArgsCount }}];
+          for (int _i = 0; _i < {{ field.args|callbackArgsCount }}; _i++) {
+            napi_argv[_i] = argv[_i];
+          }
+          result = instance->{{ field.jsFunctionName }}.GetCallback()->Call(env.Undefined(), {{ field.args|callbackArgsCount }}, napi_argv);
+          {% endif %}
+        } catch (const Napi::Error& e) {
+          // exception occurred
         }
 
         if (PromiseCompletion::ForwardIfPromise(result, baton, Configurable{{ cppClassName }}::{{ field.jsFunctionName }}_promiseCompleted)) {
@@ -139,12 +143,12 @@
           baton->Done();
         {% else %}
           {% each field|returnsInfo false true as _return %}
-            if (result.IsEmpty() || result->IsNativeError()) {
-              baton->result = {{ field.return.error }};
+            if (result.IsUndefined() || result.IsNull()) {
+              baton->result = baton->defaultResult;
             }
-            else if (!result->IsNull() && !result->IsUndefined()) {
+            else if (!result.IsNull() && !result.IsUndefined()) {
               {% if _return.isOutParam %}
-                {{ _return.cppClassName }}* wrapper = Nan::ObjectWrap::Unwrap<{{ _return.cppClassName }}>(Nan::To<v8::Object>(result).ToLocalChecked());
+                {{ _return.cppClassName }}* wrapper = Napi::ObjectWrap<{{ _return.cppClassName }}>::Unwrap(result.As<Napi::Object>());
                 wrapper->selfFreeing = false;
 
                 {% if _return.cppClassName == "GitOid" %}
@@ -154,8 +158,8 @@
                 {% endif %}
                 baton->result = {{ field.return.success }};
               {% else %}
-                if (result->IsNumber()) {
-                  baton->result = Nan::To<int>(result).FromJust();
+                if (result.IsNumber()) {
+                  baton->result = result.As<Napi::Number>().Int32Value();
                 }
                 else {
                   baton->result = baton->defaultResult;
@@ -170,8 +174,9 @@
         {% endif %}
       }
 
-      void Configurable{{ cppClassName }}::{{ field.jsFunctionName }}_promiseCompleted(bool isFulfilled, nodegit::AsyncBaton *_baton, v8::Local<v8::Value> result) {
-        Nan::HandleScope scope;
+      void Configurable{{ cppClassName }}::{{ field.jsFunctionName }}_promiseCompleted(bool isFulfilled, nodegit::AsyncBaton *_baton, Napi::Value result) {
+        Napi::Env env = result.Env();
+        Napi::HandleScope scope(env);
 
         {{ field.name|titleCase }}Baton* baton = static_cast<{{ field.name|titleCase }}Baton*>(_baton);
         {% if field.return.type == "void" %}
@@ -179,12 +184,12 @@
         {% else %}
           if (isFulfilled) {
             {% each field|returnsInfo false true as _return %}
-              if (result.IsEmpty() || result->IsNativeError()) {
-                baton->result = {{ field.return.error }};
+              if (result.IsUndefined() || result.IsNull()) {
+                baton->result = baton->defaultResult;
               }
-              else if (!result->IsNull() && !result->IsUndefined()) {
+              else if (!result.IsNull() && !result.IsUndefined()) {
                 {% if _return.isOutParam %}
-                  {{ _return.cppClassName }}* wrapper = Nan::ObjectWrap::Unwrap<{{ _return.cppClassName }}>(Nan::To<v8::Object>(result).ToLocalChecked());
+                  {{ _return.cppClassName }}* wrapper = Napi::ObjectWrap<{{ _return.cppClassName }}>::Unwrap(result.As<Napi::Object>());
                   wrapper->selfFreeing = false;
 
                   {% if _return.cppClassName == "GitOid" %}
@@ -194,8 +199,8 @@
                   {% endif %}
                   baton->result = {{ field.return.success }};
                 {% else %}
-                  if (result->IsNumber()) {
-                    baton->result = Nan::To<int>(result).FromJust();
+                  if (result.IsNumber()) {
+                    baton->result = result.As<Napi::Number>().Int32Value();
                   }
                   else {
                     baton->result = baton->defaultResult;

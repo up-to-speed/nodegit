@@ -1,52 +1,63 @@
 #ifndef NODEGIT_ASYNC_WORKER
 #define NODEGIT_ASYNC_WORKER
 
-#include <nan.h>
+#include <napi.h>
 #include <functional>
+#include <map>
 #include <memory>
+#include <string>
 #include <vector>
 #include "lock_master.h"
 #include "cleanup_handle.h"
 
 namespace nodegit {
-  class AsyncWorker : public Nan::AsyncWorker {
+  class AsyncWorker {
   public:
-    AsyncWorker(Nan::Callback *callback, const char *resourceName, std::map<std::string, std::shared_ptr<nodegit::CleanupHandle>> &cleanupHandles);
-    AsyncWorker(Nan::Callback *callback, const char *resourceName);
+    AsyncWorker(Napi::FunctionReference &&callback, const char *resourceName, std::map<std::string, std::shared_ptr<nodegit::CleanupHandle>> &cleanupHandles);
+    AsyncWorker(Napi::FunctionReference &&callback, const char *resourceName);
     AsyncWorker(const AsyncWorker &) = delete;
     AsyncWorker(AsyncWorker &&) = delete;
     AsyncWorker &operator=(const AsyncWorker &) = delete;
     AsyncWorker &operator=(AsyncWorker &&) = delete;
+    virtual ~AsyncWorker();
 
     // This must be implemented by every async worker
     // so that the thread pool can lock separately
     // from the execute method in the AsyncWorker
     virtual nodegit::LockMaster AcquireLocks() = 0;
 
+    virtual void Execute() = 0;
+
+    virtual void HandleOKCallback();
+    virtual void HandleErrorCallback();
+
+    void WorkComplete();
+
     // Ensure that the `HandleErrorCallback` will be called
     // when the AsyncWork is complete
     void Cancel();
 
-    // Retrieves the async resource attached to this AsyncWorker
-    // This is used to inform libgit2 callbacks what asyncResource
-    // they should use when working with any javascript
-    Nan::AsyncResource *GetAsyncResource();
-
-    Nan::Global<v8::Value> *GetCallbackErrorHandle();
+    Napi::Reference<Napi::Value> *GetCallbackErrorHandle();
 
     bool GetIsCancelled() const;
 
-    void Destroy() override;
+    void Destroy();
 
     void RegisterCleanupCall(std::function<void()> cleanupCall);
 
+    void SetErrorMessage(const char *msg);
+    const char *ErrorMessage() const;
+
+    void SaveToPersistent(const char *label, Napi::Value value);
+    Napi::Value GetFromPersistent(const char *label);
+
     template<class NodeGitWrapperT>
-    void Reference(v8::Local<v8::Value> item) {
-      if (item->IsFunction() || item->IsString() || item->IsNull() || item->IsUndefined()) {
+    void Reference(Napi::Value item) {
+      if (item.IsFunction() || item.IsString() || item.IsNull() || item.IsUndefined()) {
         return;
       }
 
-      auto objectWrapPointer = Nan::ObjectWrap::Unwrap<NodeGitWrapperT>(item.As<v8::Object>());
+      auto objectWrapPointer = NodeGitWrapperT::Unwrap(item.As<Napi::Object>());
       objectWrapPointer->Reference();
       RegisterCleanupCall([objectWrapPointer]() {
         objectWrapPointer->Unreference();
@@ -54,36 +65,43 @@ namespace nodegit {
     }
 
     template<class NodeGitWrapperT>
-    inline void Reference(const char *label, v8::Local<v8::Value> item) {
+    inline void Reference(const char *label, Napi::Value item) {
       SaveToPersistent(label, item);
       Reference<NodeGitWrapperT>(item);
     }
 
     template<class NodeGitWrapperT>
-    inline void Reference(const char *label, v8::Local<v8::Object> item) {
+    inline void Reference(const char *label, Napi::Object item) {
       SaveToPersistent(label, item);
       Reference<NodeGitWrapperT>(item);
     }
 
     template<class NodeGitWrapperT>
-    inline void Reference(const char *label, v8::Local<v8::Array> array) {
+    inline void Reference(const char *label, Napi::Array array) {
       SaveToPersistent(label, array);
-      for (uint32_t i = 0; i < array->Length(); ++i) {
-        Reference<NodeGitWrapperT>(Nan::Get(array, i).ToLocalChecked());
+      for (uint32_t i = 0; i < array.Length(); ++i) {
+        Reference<NodeGitWrapperT>(array.Get(i));
       }
     }
 
-    inline void Reference(const char *label, v8::Local<v8::Value> item) {
+    inline void Reference(const char *label, Napi::Value item) {
       SaveToPersistent(label, item);
     }
 
+    Napi::Env Env() const { return Napi::Env(env_); }
+
+    Napi::FunctionReference callback;
+    napi_env env_;
+
   protected:
     std::map<std::string, std::shared_ptr<nodegit::CleanupHandle>> cleanupHandles;
-    Nan::Global<v8::Value> callbackErrorHandle;
+    Napi::Reference<Napi::Value> callbackErrorHandle;
 
   private:
+    std::map<std::string, Napi::Reference<Napi::Value>> persistentHandles;
     std::vector<std::function<void()>> cleanupCalls;
     bool isCancelled = false;
+    std::string errorMessage;
 
   };
 }

@@ -1,7 +1,7 @@
 // generated from struct_header.h
 #ifndef {{ cppClassName|upper }}_H
 #define {{ cppClassName|upper }}_H
-#include <nan.h>
+#include <napi.h>
 #include <string>
 #include <utility>
 
@@ -10,7 +10,7 @@
 #include "callback_wrapper.h"
 #include "context.h"
 #include "reference_counter.h"
-#include "nodegit_wrapper.h"
+#include "bungit_wrapper.h"
 #include "configurable_class_wrapper.h"
 #include "v8_helpers.h"
 
@@ -26,9 +26,6 @@ extern "C" {
   #include "{{ dependency }}"
 {% endeach %}
 
-using namespace node;
-using namespace v8;
-
 {%partial traits .%}
 {% if isExtendedStruct %}
 struct {{ cType }}_extended {
@@ -42,16 +39,15 @@ struct {{ cType }}_extended {
       friend class NodeGitWrapper<{{ cppClassName }}Traits>;
 
     public:
-      {{ cppClassName }}({{ cType }}* raw, bool selfFreeing, v8::Local<v8::Object> owner = v8::Local<v8::Object>());
+      {{ cppClassName }}(const Napi::CallbackInfo &info);
       {{ cppClassName }}(const {{ cppClassName }} &) = delete;
       {{ cppClassName }}({{ cppClassName }} &&) = delete;
       {{ cppClassName }} &operator=(const {{ cppClassName }} &) = delete;
       {{ cppClassName }} &operator=({{ cppClassName }} &&) = delete;
-      static void InitializeComponent (v8::Local<v8::Object> target, nodegit::Context *nodegitContext);
+      ~{{ cppClassName }}();
+      static void InitializeComponent (Napi::Object target, nodegit::Context *nodegitContext);
 
     private:
-      {{ cppClassName }}();
-      ~{{ cppClassName }}();
 
       void ConstructFields();
 
@@ -59,12 +55,12 @@ struct {{ cType }}_extended {
         {% if not field.ignore %}
           {% if not field.isEnum %}
             {% if field.isLibgitType %}
-              Nan::Global<Value> {{ field.name }};
+              Napi::ObjectReference {{ field.name }};
             {% endif %}
           {% endif %}
 
-          static NAN_GETTER(Get{{ field.cppFunctionName }});
-          static NAN_SETTER(Set{{ field.cppFunctionName }});
+          Napi::Value Get{{ field.cppFunctionName }}(const Napi::CallbackInfo& info);
+          void Set{{ field.cppFunctionName }}(const Napi::CallbackInfo& info, const Napi::Value& value);
 
         {% endif %}
       {% endeach %}
@@ -75,7 +71,7 @@ class Configurable{{ cppClassName }} : public nodegit::ConfigurableClassWrapper<
   friend class nodegit::ConfigurableClassWrapper<{{ cppClassName }}Traits>;
 
 public:
-  static v8ConversionResult fromJavascript(nodegit::Context *nodegitContext, v8::Local<v8::Value> input);
+  static v8ConversionResult fromJavascript(nodegit::Context *nodegitContext, Napi::Value input);
   ~Configurable{{ cppClassName }}();
 
   Configurable{{ cppClassName }}(const Configurable{{ cppClassName }} &) = delete;
@@ -97,7 +93,7 @@ public:
 
         static void {{ field.jsFunctionName }}_cancelAsync(void *baton);
         static void {{ field.jsFunctionName }}_async(void *baton);
-        static void {{ field.jsFunctionName }}_promiseCompleted(bool isFulfilled, nodegit::AsyncBaton *_baton, v8::Local<v8::Value> result);
+        static void {{ field.jsFunctionName }}_promiseCompleted(bool isFulfilled, nodegit::AsyncBaton *_baton, Napi::Value result);
         {% if field.return.type == 'void' %}
           class {{ field.name|titleCase }}Baton : public nodegit::AsyncBatonWithNoResult {
           public:
@@ -130,7 +126,7 @@ public:
 private:
   Configurable{{ cppClassName }}(nodegit::Context *nodegitContext);
   Configurable{{ cppClassName }}() = delete;
-  Nan::Global<Value> promiseError;
+  Napi::Reference<Napi::Value> promiseError;
 
   {% each fields as field %}
     {% if not field.ignore %}
@@ -141,7 +137,7 @@ private:
           {% elsif field.cppClassName == 'GitStrarray' %}
             {%-- We do not need to generate anything here --%}
           {% else %}
-            Nan::Global<Object> {{ field.jsFunctionName }};
+            Napi::ObjectReference {{ field.jsFunctionName }};
           {% endif %}
         {% elsif field.isCallbackFunction %}
           CallbackWrapper {{ field.jsFunctionName }};

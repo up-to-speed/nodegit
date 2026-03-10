@@ -19,7 +19,7 @@ struct {{ cppClassName }}Traits {
     {{ cpyFunction }}(copy, src);
     *dest = copy;
   {% else %}
-    Nan::ThrowError("duplicate called on {{ cppClassName }} which cannot be duplicated");
+    throw std::runtime_error("duplicate called on {{ cppClassName }} which cannot be duplicated");
   {% endif %}
   }
 
@@ -36,7 +36,7 @@ struct {{ cppClassName }}Traits {
       ::{{ freeFunctionName }}(raw); // :: to avoid calling this free recursively
     }
   {% else %}
-    Nan::ThrowError("free called on {{ cppClassName }} which cannot be freed");
+    throw std::runtime_error("free called on {{ cppClassName }} which cannot be freed");
   {% endif %}
   }
 };

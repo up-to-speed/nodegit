@@ -1,6 +1,6 @@
 # Manual templates
 
-  Manual templates override generated code from nodegit while generating source code. They really should be avoid untill absolutely necessary.
+  Manual templates override generated code from bungit while generating source code. They really should be avoid untill absolutely necessary.
 
 ## Why?
 
@@ -26,10 +26,10 @@
 #### 3. Add references to binding.gyp template
     location: /generate/templates/templates/binding.gyp
 
-#### 4. Add headers to nodegit.cc template
-    location: /generate/templates/templates/nodegit.cc
+#### 4. Add headers to bungit.cc template
+    location: /generate/templates/templates/bungit.cc
 
-#### 5. Add new wrapper to nodegit.js template
+#### 5. Add new wrapper to bungit.js template
     use rawApi.ManualWrapper reference to add _ManualWrapper
     add any js wrapper (if any) via importExtension
 
