@@ -16,7 +16,13 @@ describe("Reference", function() {
   before(function() {
     var test = this;
 
-    return exec("git reset --hard origin/master", {cwd: reposPath})
+    return exec("git checkout -f master", {cwd: reposPath})
+      .then(function() {
+        return exec("git reset --hard origin/master", {cwd: reposPath})
+          .catch(function() {
+            return exec("git reset --hard", {cwd: reposPath});
+          });
+      })
       .then(function() {
         return Repository.open(reposPath);
       })

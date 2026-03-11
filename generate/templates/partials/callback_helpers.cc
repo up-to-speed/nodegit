@@ -56,17 +56,19 @@ void {{ cppClassName }}::{{ cppFunctionName }}_{{ cbFunction.name }}_async(void 
   };
 
   Napi::Value result;
+  bool callSucceeded = false;
   try {
     napi_value napi_argv[{{ cbFunction.args|callbackArgsCount }}];
     for (int _i = 0; _i < {{ cbFunction.args|callbackArgsCount }}; _i++) {
       napi_argv[_i] = argv[_i];
     }
     result = callback->Call(env.Undefined(), {{ cbFunction.args|callbackArgsCount }}, napi_argv);
+    callSucceeded = !result.IsEmpty();
   } catch (const Napi::Error& e) {
-    // exception occurred
+    // exception occurred — result is invalid, don't forward
   }
 
-  if(PromiseCompletion::ForwardIfPromise(result, baton, {{ cppFunctionName }}_{{ cbFunction.name }}_promiseCompleted)) {
+  if(callSucceeded && PromiseCompletion::ForwardIfPromise(result, baton, {{ cppFunctionName }}_{{ cbFunction.name }}_promiseCompleted)) {
     return;
   }
 

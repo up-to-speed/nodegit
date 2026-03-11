@@ -508,22 +508,24 @@ namespace nodegit {
 
       void QueueCallbackOnJSThread(ThreadPool::Callback callback, ThreadPool::Callback cancelCallback, bool isWork);
 
-      static void RunLoopCallbacks(uv_async_t *handle);
+      static void RunLoopCallbacksTSFN(napi_env env, napi_value js_callback, void *context, void *data);
+
+      static void FinalizeTSFN(napi_env env, void *finalize_data, void *context);
 
       void Shutdown(std::unique_ptr<AsyncContextCleanupHandle> cleanupHandle);
 
-      struct AsyncCallbackData {
-        AsyncCallbackData(ThreadPoolImpl *pool)
-          : pool(pool)
-        {}
-
+      // Separate heap-allocated struct to hold the cleanup handle.
+      // This is passed as TSFN finalize_data so we can release it
+      // without accessing ThreadPoolImpl (which will be destroyed
+      // as part of the cleanup chain).
+      struct TSFNCleanupData {
         std::unique_ptr<AsyncContextCleanupHandle> cleanupHandle;
-        ThreadPoolImpl *pool;
       };
 
     private:
       bool isMarkedForDeletion;
       napi_env env_;
+      TSFNCleanupData *tsfnCleanupData_;
 
       struct JSThreadCallback {
         JSThreadCallback(ThreadPool::Callback callback, ThreadPool::Callback cancelCallback, bool isWork)
@@ -559,21 +561,58 @@ namespace nodegit {
       // completion and async callbacks to be performed on the loop
       std::queue<JSThreadCallback> jsThreadCallbackQueue;
       std::unique_ptr<std::mutex> jsThreadCallbackMutex;
-      uv_async_t jsThreadCallbackAsync;
+      napi_threadsafe_function tsfn_;
 
       std::vector<Orchestrator> orchestrators;
   };
+
+  // TSFN callback — called on the JS thread
+  void ThreadPoolImpl::RunLoopCallbacksTSFN(napi_env env, napi_value js_callback, void *context, void *data) {
+    ThreadPoolImpl *pool = static_cast<ThreadPoolImpl *>(context);
+    if (pool) {
+      pool->RunLoopCallbacks();
+    }
+  }
+
+  // TSFN destructor — called when the TSFN is fully released.
+  // The finalize_data holds a heap-allocated unique_ptr to the cleanup handle.
+  // Deleting it triggers AsyncContextCleanupHandle destruction, which calls
+  // napi_remove_async_cleanup_hook and deletes the Context. We use a separate
+  // allocation (not stored on ThreadPoolImpl) to avoid deleting `this` during
+  // finalization — deleting the cleanup handle cascades through Context →
+  // ThreadPool → ThreadPoolImpl, so we must not reference ThreadPoolImpl after.
+  void ThreadPoolImpl::FinalizeTSFN(napi_env env, void *finalize_data, void *context) {
+    auto *data = static_cast<TSFNCleanupData *>(finalize_data);
+    delete data; // destroys cleanupHandle → napi_remove_async_cleanup_hook → delete Context
+  }
 
   // context required to be passed to Orchestrators, but ThreadPoolImpl doesn't need to keep it
   ThreadPoolImpl::ThreadPoolImpl(int numberOfThreads, uv_loop_t *loop, nodegit::Context *context, napi_env env)
     : isMarkedForDeletion(false),
       env_(env),
+      tsfnCleanupData_(new TSFNCleanupData()),
       orchestratorJobMutex(new std::mutex),
       jsThreadCallbackMutex(new std::mutex)
   {
-    uv_async_init(loop, &jsThreadCallbackAsync, RunLoopCallbacks);
-    jsThreadCallbackAsync.data = new AsyncCallbackData(this);
-    uv_unref((uv_handle_t *)&jsThreadCallbackAsync);
+    // Create a threadsafe function to signal the JS thread from worker threads.
+    // This replaces uv_async_t for Bun compatibility (Bun doesn't support uv_async_init).
+    napi_value resourceName;
+    napi_create_string_utf8(env, "nodegit_threadpool", NAPI_AUTO_LENGTH, &resourceName);
+    napi_create_threadsafe_function(
+      env,
+      nullptr,           // js_func — not needed, we use the context
+      nullptr,           // async_resource
+      resourceName,      // async_resource_name
+      0,                 // max_queue_size — 0 = unlimited
+      1,                 // initial_thread_count
+      tsfnCleanupData_,  // thread_finalize_data — cleanup handle holder
+      FinalizeTSFN,      // thread_finalize_cb — triggers cleanup completion
+      this,              // context
+      RunLoopCallbacksTSFN, // call_js_cb
+      &tsfn_
+    );
+    // Start unreferenced so the process can exit if no work is pending
+    napi_unref_threadsafe_function(env, tsfn_);
 
     workInProgressCount = 0;
 
@@ -590,7 +629,7 @@ namespace nodegit {
     std::lock_guard<std::mutex> lock(*orchestratorJobMutex);
     // there is work on the thread pool - reference the handle so
     // node doesn't terminate
-    uv_ref((uv_handle_t *)&jsThreadCallbackAsync);
+    napi_ref_threadsafe_function(env_, tsfn_);
     orchestratorJobQueue.emplace(new Orchestrator::AsyncWorkJob(worker));
     workInProgressCount++;
     orchestratorJobCondition.notify_one();
@@ -624,20 +663,9 @@ namespace nodegit {
       return;
     }
 
-    bool queueWasEmpty = jsThreadCallbackQueue.empty();
     jsThreadCallbackQueue.emplace(callback, cancelCallback, isWork);
-    // we only trigger RunLoopCallbacks via the jsThreadCallbackAsync handle if the queue
-    // was empty.  Otherwise, we depend on RunLoopCallbacks to re-trigger itself
-    if (queueWasEmpty) {
-      uv_async_send(&jsThreadCallbackAsync);
-    }
-  }
-
-  void ThreadPoolImpl::RunLoopCallbacks(uv_async_t* handle) {
-    auto asyncCallbackData = static_cast<AsyncCallbackData *>(handle->data);
-    if (asyncCallbackData->pool) {
-      asyncCallbackData->pool->RunLoopCallbacks();
-    }
+    // Signal the JS thread via TSFN — napi_call_threadsafe_function is safe to call from any thread
+    napi_call_threadsafe_function(tsfn_, nullptr, napi_tsfn_nonblocking);
   }
 
   // NOTE this should theoretically never be triggered during a cleanup operation
@@ -645,16 +673,28 @@ namespace nodegit {
     Napi::HandleScope scope(env_);
 
     std::unique_lock<std::mutex> lock(*jsThreadCallbackMutex);
+    if (jsThreadCallbackQueue.empty()) {
+      return;
+    }
     // get the next callback to run
     JSThreadCallback jsThreadCallback = jsThreadCallbackQueue.front();
     jsThreadCallbackQueue.pop();
 
     lock.unlock();
-    jsThreadCallback.performCallback();
+    try {
+      jsThreadCallback.performCallback();
+    } catch (const Napi::Error &e) {
+      // Catch N-API errors to prevent them from propagating through the TSFN
+      // dispatcher. Bun's TSFN implementation panics on uncaught C++ exceptions.
+      // The error has already been thrown into the JS engine by Napi::Error.
+    } catch (...) {
+      // Catch any other C++ exceptions to prevent TSFN dispatcher crashes.
+    }
     lock.lock();
 
+    // If there are more callbacks, signal again
     if (!jsThreadCallbackQueue.empty()) {
-      uv_async_send(&jsThreadCallbackAsync);
+      napi_call_threadsafe_function(tsfn_, nullptr, napi_tsfn_nonblocking);
     }
 
     // if there is no ongoing work / completion processing, node doesn't need
@@ -663,7 +703,7 @@ namespace nodegit {
       std::lock_guard<std::mutex> orchestratorLock(*orchestratorJobMutex);
       workInProgressCount--;
       if (!workInProgressCount) {
-        uv_unref((uv_handle_t *)&jsThreadCallbackAsync);
+        napi_unref_threadsafe_function(env_, tsfn_);
       }
     }
   }
@@ -692,10 +732,9 @@ namespace nodegit {
       orchestratorJobQueue.emplace(new Orchestrator::ShutdownJob);
 
       if (workInProgressCount) {
-        // unref the jsThreadCallback for all work in progress
-        // it will not be used after this function has completed
+        // unref the TSFN for all work in progress
         while (workInProgressCount--) {
-          uv_unref((uv_handle_t *)&jsThreadCallbackAsync);
+          napi_unref_threadsafe_function(env_, tsfn_);
         }
       }
 
@@ -739,14 +778,13 @@ namespace nodegit {
       jsThreadCallbackQueue.pop();
     }
 
-    AsyncCallbackData *asyncCallbackData = static_cast<AsyncCallbackData *>(jsThreadCallbackAsync.data);
-    asyncCallbackData->cleanupHandle.swap(cleanupHandle);
-    asyncCallbackData->pool = nullptr;
+    // Store cleanupHandle in the TSFN's finalize data so it gets released
+    // when the TSFN is fully finalized (via FinalizeTSFN).
+    tsfnCleanupData_->cleanupHandle = std::move(cleanupHandle);
 
-    uv_close(reinterpret_cast<uv_handle_t *>(&jsThreadCallbackAsync), [](uv_handle_t *handle) {
-      auto asyncCallbackData = static_cast<AsyncCallbackData *>(handle->data);
-      delete asyncCallbackData;
-    });
+    // Release the TSFN — FinalizeTSFN will be called when fully released,
+    // triggering cleanup handle destruction → Context deletion.
+    napi_release_threadsafe_function(tsfn_, napi_tsfn_release);
   }
 
   ThreadPool::ThreadPool(int numberOfThreads, uv_loop_t *loop, nodegit::Context *context, napi_env env)

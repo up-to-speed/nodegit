@@ -42,14 +42,14 @@ void ConvenientHunk::InitializeComponent(Napi::Object target, nodegit::Context *
   Napi::Env env = target.Env();
 
   Napi::Function constructor_template = DefineClass(env, "ConvenientHunk", {
-    InstanceMethod("size", &ConvenientHunk::Size),
-    InstanceMethod("lines", &ConvenientHunk::Lines),
-    InstanceMethod("oldStart", &ConvenientHunk::OldStart),
-    InstanceMethod("oldLines", &ConvenientHunk::OldLines),
-    InstanceMethod("newStart", &ConvenientHunk::NewStart),
-    InstanceMethod("newLines", &ConvenientHunk::NewLines),
-    InstanceMethod("headerLen", &ConvenientHunk::HeaderLen),
-    InstanceMethod("header", &ConvenientHunk::Header),
+    InstanceMethod("size", &ConvenientHunk::Size, static_cast<napi_property_attributes>(napi_writable | napi_configurable)),
+    InstanceMethod("lines", &ConvenientHunk::Lines, static_cast<napi_property_attributes>(napi_writable | napi_configurable)),
+    InstanceMethod("oldStart", &ConvenientHunk::OldStart, static_cast<napi_property_attributes>(napi_writable | napi_configurable)),
+    InstanceMethod("oldLines", &ConvenientHunk::OldLines, static_cast<napi_property_attributes>(napi_writable | napi_configurable)),
+    InstanceMethod("newStart", &ConvenientHunk::NewStart, static_cast<napi_property_attributes>(napi_writable | napi_configurable)),
+    InstanceMethod("newLines", &ConvenientHunk::NewLines, static_cast<napi_property_attributes>(napi_writable | napi_configurable)),
+    InstanceMethod("headerLen", &ConvenientHunk::HeaderLen, static_cast<napi_property_attributes>(napi_writable | napi_configurable)),
+    InstanceMethod("header", &ConvenientHunk::Header, static_cast<napi_property_attributes>(napi_writable | napi_configurable)),
   });
 
   nodegitContext->SaveToPersistent("ConvenientHunk::Template", constructor_template);

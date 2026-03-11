@@ -5,7 +5,11 @@ function garbageCollect() {
   var usedBeforeGC = Number.MAX_VALUE;
   var nondecreasingIterations = 0;
   for ( ; ; ) {
-    global.gc();
+    if (global.gc) {
+      global.gc();
+    } else if (typeof Bun !== "undefined" && Bun.gc) {
+      Bun.gc(true);
+    }
     var usedAfterGC = process.memoryUsage().heapUsed;
     if (usedAfterGC >= usedBeforeGC) {
       nondecreasingIterations++;

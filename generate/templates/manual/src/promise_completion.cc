@@ -6,8 +6,8 @@ void PromiseCompletion::InitializeComponent(nodegit::Context *nodegitContext) {
   Napi::Env env = nodegitContext->GetEnv();
 
   Napi::Function func = DefineClass(env, "PromiseCompletion", {
-    InstanceMethod("promiseFulfilled", &PromiseCompletion::PromiseFulfilled),
-    InstanceMethod("promiseRejected", &PromiseCompletion::PromiseRejected),
+    InstanceMethod("promiseFulfilled", &PromiseCompletion::PromiseFulfilled, static_cast<napi_property_attributes>(napi_writable | napi_configurable)),
+    InstanceMethod("promiseRejected", &PromiseCompletion::PromiseRejected, static_cast<napi_property_attributes>(napi_writable | napi_configurable)),
   });
 
   nodegitContext->SaveToPersistent("PromiseCompletion::Template", func);

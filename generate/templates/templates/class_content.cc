@@ -50,18 +50,20 @@ using namespace std;
     {% each functions as function %}
       {% if not function.ignore %}
         {% if function.isPrototypeMethod %}
-          InstanceMethod("{{ function.jsFunctionName }}", &{{ cppClassName }}::{{ function.cppFunctionName }}),
+          InstanceMethod("{{ function.jsFunctionName }}", &{{ cppClassName }}::{{ function.cppFunctionName }}, static_cast<napi_property_attributes>(napi_writable | napi_configurable)),
         {% else %}
-          StaticMethod("{{ function.jsFunctionName }}", &{{ cppClassName }}::{{ function.cppFunctionName }}),
+          StaticMethod("{{ function.jsFunctionName }}", &{{ cppClassName }}::{{ function.cppFunctionName }}, static_cast<napi_property_attributes>(napi_writable | napi_configurable)),
         {% endif %}
       {% endif %}
     {% endeach %}
 
     {% each fields as field %}
       {% if not field.ignore %}
-        InstanceMethod("{{ field.jsFunctionName }}", &{{ cppClassName }}::{{ field.cppFunctionName }}),
+        InstanceMethod("{{ field.jsFunctionName }}", &{{ cppClassName }}::{{ field.cppFunctionName }}, static_cast<napi_property_attributes>(napi_writable | napi_configurable)),
       {% endif %}
     {% endeach %}
+      StaticMethod("getSelfFreeingInstanceCount", &{{ cppClassName }}::GetSelfFreeingInstanceCount, static_cast<napi_property_attributes>(napi_writable | napi_configurable)),
+      StaticMethod("getNonSelfFreeingConstructedCount", &{{ cppClassName }}::GetNonSelfFreeingConstructedCount, static_cast<napi_property_attributes>(napi_writable | napi_configurable)),
     });
 
     InitializeTemplate(constructor_template);

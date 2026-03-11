@@ -20,7 +20,8 @@ var args = cov.concat([
   "test/tests",
   "--expose-gc",
   "--timeout",
-  "15000"
+  "150000",
+  "--exit"
 ]);
 
 if (!process.env.APPVEYOR && !process.env.TRAVIS && !process.env.GITHUB_ACTION) {

@@ -51,7 +51,13 @@ namespace nodegit {
   }
 
   void AsyncWorker::SaveToPersistent(const char *label, Napi::Value value) {
-    persistentHandles[label] = Napi::Reference<Napi::Value>::New(value, 1);
+    // In Node.js v21+, napi_create_reference only works for objects, functions,
+    // and symbols — not strings, numbers, booleans, or other primitives.
+    // For primitives, skip creating the reference; they are immutable values
+    // that don't need prevented from GC (they'll be copied to the baton already).
+    if (value.IsObject() || value.IsFunction() || value.IsSymbol()) {
+      persistentHandles[label] = Napi::Reference<Napi::Value>::New(value, 1);
+    }
   }
 
   Napi::Value AsyncWorker::GetFromPersistent(const char *label) {

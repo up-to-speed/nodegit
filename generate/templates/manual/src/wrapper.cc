@@ -17,7 +17,7 @@ Wrapper::Wrapper(const Napi::CallbackInfo &info)
 
 Napi::Object Wrapper::InitializeComponent(Napi::Env env, Napi::Object target, nodegit::Context *nodegitContext) {
   Napi::Function func = DefineClass(env, "Wrapper", {
-    InstanceMethod("toBuffer", &Wrapper::ToBuffer),
+    InstanceMethod("toBuffer", &Wrapper::ToBuffer, static_cast<napi_property_attributes>(napi_writable | napi_configurable)),
   });
   nodegitContext->SaveToPersistent("Wrapper::Template", func);
   target.Set("Wrapper", func);

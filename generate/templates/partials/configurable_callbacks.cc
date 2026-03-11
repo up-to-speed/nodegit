@@ -121,6 +121,7 @@
         {% endif %}
 
         Napi::Value result;
+        bool callSucceeded = false;
         try {
           {% if field.args|callbackArgsCount == 0 %}
           result = instance->{{ field.jsFunctionName }}.GetCallback()->Call({});
@@ -131,11 +132,12 @@
           }
           result = instance->{{ field.jsFunctionName }}.GetCallback()->Call(env.Undefined(), {{ field.args|callbackArgsCount }}, napi_argv);
           {% endif %}
+          callSucceeded = !result.IsEmpty();
         } catch (const Napi::Error& e) {
-          // exception occurred
+          // exception occurred — result is invalid, don't forward
         }
 
-        if (PromiseCompletion::ForwardIfPromise(result, baton, Configurable{{ cppClassName }}::{{ field.jsFunctionName }}_promiseCompleted)) {
+        if (callSucceeded && PromiseCompletion::ForwardIfPromise(result, baton, Configurable{{ cppClassName }}::{{ field.jsFunctionName }}_promiseCompleted)) {
           return;
         }
 
