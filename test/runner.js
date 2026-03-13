@@ -192,7 +192,14 @@ before(function() {
 
 beforeEach(function() {
   this.timeout(10000);
-  return exec("git clean -xdf", {cwd: workdirPath})
+  // Remove stale lock files FIRST, before any git operations that need them
+  return Promise.all([
+    fse.remove(path.join(gitDir, "index.lock")).catch(function() {}),
+    fse.remove(path.join(gitDir, "HEAD.lock")).catch(function() {})
+  ])
+  .then(function() {
+    return exec("git clean -xdf", {cwd: workdirPath});
+  })
   .then(function() {
     // Abort any in-progress merge/rebase
     return exec("git merge --abort", {cwd: workdirPath}).catch(function() {});
@@ -226,13 +233,6 @@ beforeEach(function() {
           return fse.remove(path.join(gitDir, "packed-refs"))
             .catch(function() {});
         })
-    ]);
-  })
-  .then(function() {
-    // Remove any lock files that might prevent checkout
-    return Promise.all([
-      fse.remove(path.join(gitDir, "index.lock")).catch(function() {}),
-      fse.remove(path.join(gitDir, "HEAD.lock")).catch(function() {})
     ]);
   })
   .then(function() {

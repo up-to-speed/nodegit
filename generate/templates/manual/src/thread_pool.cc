@@ -670,6 +670,13 @@ namespace nodegit {
 
   // NOTE this should theoretically never be triggered during a cleanup operation
   void ThreadPoolImpl::RunLoopCallbacks() {
+    // If the thread pool is being torn down, skip callback processing.
+    // The env may be invalid (e.g., during process.exit() after
+    // worker.terminate()). Creating a HandleScope on a dead env crashes.
+    if (isMarkedForDeletion) {
+      return;
+    }
+
     Napi::HandleScope scope(env_);
 
     std::unique_lock<std::mutex> lock(*jsThreadCallbackMutex);

@@ -30,7 +30,12 @@ describe("Repository", function() {
         test.repository = repository;
       })
       .then(function() {
-        return Repository.open(emptyRepoPath);
+        // Reinitialize the empty repo to ensure it has no commits
+        // (the createCommitOnHead test adds a commit)
+        return fse.remove(emptyRepoPath)
+          .then(function() {
+            return Repository.init(emptyRepoPath, 0);
+          });
       })
       .then(function(emptyRepo) {
         test.emptyRepo = emptyRepo;

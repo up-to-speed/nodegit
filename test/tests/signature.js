@@ -86,25 +86,40 @@ describe("Signature", function() {
   });
 
   it("duplicates time", function() {
-    garbageCollect();
     var Time = NodeGit.Time;
-    var startSelfFreeingCount = Time.getSelfFreeingInstanceCount();
-    var startNonSelfFreeingCount =
-      Time.getNonSelfFreeingConstructedCount();
-    var time = Signature.now(name, email).when();
+    return garbageCollect.async()
+      .then(function() {
+        var startSelfFreeingCount = Time.getSelfFreeingInstanceCount();
+        var startNonSelfFreeingCount =
+          Time.getNonSelfFreeingConstructedCount();
 
-    garbageCollect();
-    var endSelfFreeingCount = Time.getSelfFreeingInstanceCount();
-    var endNonSelfFreeingCount = Time.getNonSelfFreeingConstructedCount();
-    // we should get one duplicated, self-freeing time
-    assert.equal(startSelfFreeingCount + 1, endSelfFreeingCount);
-    assert.equal(startNonSelfFreeingCount, endNonSelfFreeingCount);
+        (function() {
+          var time = Signature.now(name, email).when();
+          var endSelfFreeingCount = Time.getSelfFreeingInstanceCount();
+          var endNonSelfFreeingCount = Time.getNonSelfFreeingConstructedCount();
+          assert.equal(startSelfFreeingCount + 1, endSelfFreeingCount);
+          assert.equal(startNonSelfFreeingCount, endNonSelfFreeingCount);
+        })();
 
-    time = null;
-    garbageCollect();
-    endSelfFreeingCount = Time.getSelfFreeingInstanceCount();
-    // the self-freeing time should get freed
-    assert.equal(startSelfFreeingCount, endSelfFreeingCount);
+        function attemptGcAndCheck(remaining) {
+          return garbageCollect.async()
+            .then(function() {
+              var endSelfFreeingCount = Time.getSelfFreeingInstanceCount();
+              if (endSelfFreeingCount === startSelfFreeingCount) {
+                return;
+              }
+              if (remaining <= 0) {
+                assert.equal(startSelfFreeingCount, endSelfFreeingCount);
+              }
+              return new Promise(function(resolve) {
+                setTimeout(resolve, 100);
+              }).then(function() {
+                return attemptGcAndCheck(remaining - 1);
+              });
+            });
+        }
+        return attemptGcAndCheck(30);
+      });
   });
 
   it("toString does not provide a timestamp by default", function () {

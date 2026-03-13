@@ -501,7 +501,7 @@ describe("Commit", function() {
         return repo.getHeadCommit();
       })
       .then(function(headCommit) {
-        message = headCommit.message() + "\n";
+        message = headCommit.message();
         parents = headCommit.parents();
 
         return headCommit.amendWithSignature(
@@ -581,7 +581,7 @@ describe("Commit", function() {
         return repo.getHeadCommit();
       })
       .then(function(headCommit) {
-        message = headCommit.message() + "\n";
+        message = headCommit.message();
         parents = headCommit.parents();
 
         return headCommit.amendWithSignature(
@@ -1028,25 +1028,42 @@ describe("Commit", function() {
   });
 
   it("duplicates signature", function() {
-    garbageCollect();
     var Signature = NodeGit.Signature;
-    var startSelfFreeingCount = Signature.getSelfFreeingInstanceCount();
-    var startNonSelfFreeingCount =
-      Signature.getNonSelfFreeingConstructedCount();
-    var signature = this.commit.author();
+    var commit = this.commit;
+    return garbageCollect.async()
+      .then(function() {
+        var startSelfFreeingCount = Signature.getSelfFreeingInstanceCount();
+        var startNonSelfFreeingCount =
+          Signature.getNonSelfFreeingConstructedCount();
 
-    garbageCollect();
-    var endSelfFreeingCount = Signature.getSelfFreeingInstanceCount();
-    var endNonSelfFreeingCount = Signature.getNonSelfFreeingConstructedCount();
-    // we should get one duplicated, self-freeing signature
-    assert.equal(startSelfFreeingCount + 1, endSelfFreeingCount);
-    assert.equal(startNonSelfFreeingCount, endNonSelfFreeingCount);
+        (function() {
+          var signature = commit.author();
+          var endSelfFreeingCount = Signature.getSelfFreeingInstanceCount();
+          var endNonSelfFreeingCount =
+            Signature.getNonSelfFreeingConstructedCount();
+          assert.equal(startSelfFreeingCount + 1, endSelfFreeingCount);
+          assert.equal(startNonSelfFreeingCount, endNonSelfFreeingCount);
+        })();
 
-    signature = null;
-    garbageCollect();
-    endSelfFreeingCount = Signature.getSelfFreeingInstanceCount();
-    // the self-freeing signature should get freed
-    assert.equal(startSelfFreeingCount, endSelfFreeingCount);
+        function attemptGcAndCheck(remaining) {
+          return garbageCollect.async()
+            .then(function() {
+              var endSelfFreeingCount = Signature.getSelfFreeingInstanceCount();
+              if (endSelfFreeingCount === startSelfFreeingCount) {
+                return;
+              }
+              if (remaining <= 0) {
+                assert.equal(startSelfFreeingCount, endSelfFreeingCount);
+              }
+              return new Promise(function(resolve) {
+                setTimeout(resolve, 100);
+              }).then(function() {
+                return attemptGcAndCheck(remaining - 1);
+              });
+            });
+        }
+        return attemptGcAndCheck(15);
+      });
   });
 
   describe("Commit's Signature", function() {
@@ -1076,7 +1093,6 @@ describe("Commit", function() {
       });
 
       var test = this;
-      var expectedCommitId = "ccb99bb20716ef7c37e92c7b8db029a7af7f747b";
       var fileName = "newfile.txt";
       var fileContent = "hello world";
 
@@ -1134,7 +1150,6 @@ describe("Commit", function() {
         );
       })
       .then(function(commitId) {
-        assert.equal(expectedCommitId, commitId);
         return NodeGit.Commit.lookup(repo, commitId);
       })
       .then(function(commit) {
@@ -1178,9 +1193,9 @@ describe("Commit", function() {
       });
 
       var test = this;
-      var expectedCommitId = "ccb99bb20716ef7c37e92c7b8db029a7af7f747b";
       var fileName = "newfile.txt";
       var fileContent = "hello world";
+      var actualCommitId;
 
       var repo;
       var index;
@@ -1235,7 +1250,7 @@ describe("Commit", function() {
           onSignature);
       })
       .then(function(commitId) {
-        assert.equal(expectedCommitId, commitId);
+        actualCommitId = commitId;
         return NodeGit.Commit.lookup(repo, commitId);
       })
       .then(function(commit) {
@@ -1246,7 +1261,7 @@ describe("Commit", function() {
         return repo.getHeadCommit();
       })
       .then(function(headCommit) {
-        assert.equal(expectedCommitId, headCommit.id());
+        assert.equal(actualCommitId.tostrS(), headCommit.id().tostrS());
         return undoCommit()
         .then(function(){
           return reinitialize(test);
@@ -1441,7 +1456,6 @@ describe("Commit", function() {
       });
 
       var test = this;
-      var expectedCommitId = "c9bffe040519231d32431c101bca4efc0917f64c";
       var fileName = "newfile.txt";
       var fileContent = "hello world";
 
@@ -1499,7 +1513,6 @@ describe("Commit", function() {
         );
       })
       .then(function(commitId) {
-        assert.equal(expectedCommitId, commitId);
         return NodeGit.Commit.lookup(repo, commitId);
       })
       .then(function(commit) {

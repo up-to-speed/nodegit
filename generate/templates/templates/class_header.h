@@ -102,7 +102,11 @@ class {{ cppClassName }} : public
     {%if cType%}
     {{ cppClassName }}(const Napi::CallbackInfo &info)
       : NodeGitWrapper<{{ cppClassName }}Traits>(info)
-    {}
+    {
+      if (info.Length() == 0 || !info[0].IsExternal()) {
+        Napi::TypeError::New(info.Env(), "{{ cppClassName }} cannot be instantiated directly").ThrowAsJavaScriptException();
+      }
+    }
     ~{{ cppClassName }}();
     {%endif%}
 

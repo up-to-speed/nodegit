@@ -197,7 +197,10 @@ describe("Index", function() {
     var ourBranch;
     var theirBranch;
 
-    return Repository.init(rebaseReposPath, 0)
+    return fse.remove(rebaseReposPath)
+      .then(function() {
+        return Repository.init(rebaseReposPath, 0);
+      })
       .then(function(repo) {
         repository = repo;
         return fse.writeFile(path.join(repository.workdir(), fileName),

@@ -21,4 +21,26 @@ function garbageCollect() {
   }
 }
 
+// Async version: runs gc, then yields to the event loop so that N-API weak ref
+// / destructor callbacks fire. Repeats multiple rounds to handle destructor
+// chains where freeing object A releases a reference to object B, which then
+// needs another gc + yield cycle to be collected.
+function garbageCollectAsync(rounds) {
+  rounds = rounds || 10;
+  function doRound(remaining) {
+    garbageCollect();
+    if (remaining <= 0) {
+      return Promise.resolve();
+    }
+    return new Promise(function(resolve) {
+      setTimeout(function() {
+        resolve(doRound(remaining - 1));
+      }, 0);
+    });
+  }
+  return doRound(rounds);
+}
+
+garbageCollect.async = garbageCollectAsync;
+
 module.exports = garbageCollect;
