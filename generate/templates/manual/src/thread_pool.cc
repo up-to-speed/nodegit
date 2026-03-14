@@ -370,6 +370,12 @@ namespace nodegit {
           // the same thread that acquired the locks also releases them
           nodegit::LockMaster lock = worker->AcquireLocks();
           ScheduleWorkTaskOnExecutor(std::bind(&nodegit::AsyncWorker::Execute, worker), worker->GetCallbackErrorHandle());
+
+          // Temporarily unlock while processing callbacks from the executor.
+          // This prevents deadlocks when a JS callback needs to run another
+          // libgit2 operation that requires the same repository lock.
+          LockMaster::TemporaryUnlock temporaryUnlock;
+
           for ( ; ; ) {
             std::shared_ptr<Executor::Event> event = TakeEventFromExecutor();
             if (event->type == Executor::Event::Type::COMPLETED) {
@@ -382,10 +388,6 @@ namespace nodegit {
             std::shared_ptr<std::condition_variable> callbackCondition(new std::condition_variable);
             bool hasCompleted = false;
 
-            // Temporary workaround for LFS checkout. Code removed to be reverted.
-            //LockMaster::TemporaryUnlock temporaryUnlock;
-
-            // Temporary workaround for LFS checkout. Code added to be reverted.
             bool isWorkerThreaded = executor.IsGitThreaded();
             ThreadPool::Callback callbackCompleted = []() {};
             if (!isWorkerThreaded) {
@@ -395,28 +397,15 @@ namespace nodegit {
                 callbackCondition->notify_one();
               };
             }
-            std::unique_ptr<LockMaster::TemporaryUnlock> temporaryUnlock {nullptr};
-            if (!isWorkerThreaded) {
-              temporaryUnlock = std::make_unique<LockMaster::TemporaryUnlock>();
-            }
 
             auto onCompletedCallback = (*callbackEvent)(
               [this](ThreadPool::Callback callback, ThreadPool::Callback cancelCallback) {
                 queueCallbackOnJSThread(callback, cancelCallback, false);
               },
-              // Temporary workaround for LFS checkout. Code modified to be reverted.
-              /*
-              [callbackCondition, callbackMutex, &hasCompleted]() {
-                std::lock_guard<std::mutex> lock(*callbackMutex);
-                hasCompleted = true;
-                callbackCondition->notify_one();
-              }
-              */
               callbackCompleted,
               isWorkerThreaded
             );
 
-            // Temporary workaround for LFS checkout. Code modified to be reverted.
             if (!isWorkerThreaded) {
               std::unique_lock<std::mutex> lock(*callbackMutex);
               while (!hasCompleted) callbackCondition->wait(lock);
@@ -568,6 +557,9 @@ namespace nodegit {
 
   // TSFN callback — called on the JS thread
   void ThreadPoolImpl::RunLoopCallbacksTSFN(napi_env env, napi_value js_callback, void *context, void *data) {
+    if (!env) {
+      return;
+    }
     ThreadPoolImpl *pool = static_cast<ThreadPoolImpl *>(context);
     if (pool) {
       pool->RunLoopCallbacks();
@@ -582,8 +574,14 @@ namespace nodegit {
   // finalization — deleting the cleanup handle cascades through Context →
   // ThreadPool → ThreadPoolImpl, so we must not reference ThreadPoolImpl after.
   void ThreadPoolImpl::FinalizeTSFN(napi_env env, void *finalize_data, void *context) {
-    auto *data = static_cast<TSFNCleanupData *>(finalize_data);
-    delete data; // destroys cleanupHandle → napi_remove_async_cleanup_hook → delete Context
+    try {
+      auto *data = static_cast<TSFNCleanupData *>(finalize_data);
+      delete data; // destroys cleanupHandle → napi_remove_async_cleanup_hook → delete Context
+    } catch (const Napi::Error &e) {
+      // Swallow N-API errors during worker teardown
+    } catch (...) {
+      // Swallow any other C++ exceptions during teardown
+    }
   }
 
   // context required to be passed to Orchestrators, but ThreadPoolImpl doesn't need to keep it
@@ -670,6 +668,10 @@ namespace nodegit {
 
   // NOTE this should theoretically never be triggered during a cleanup operation
   void ThreadPoolImpl::RunLoopCallbacks() {
+    if (isMarkedForDeletion) {
+      return;
+    }
+
     Napi::HandleScope scope(env_);
 
     std::unique_lock<std::mutex> lock(*jsThreadCallbackMutex);
@@ -740,17 +742,23 @@ namespace nodegit {
       orchestratorJobCondition.notify_all();
     }
 
-    Napi::HandleScope scope(env_);
+    try {
+      Napi::HandleScope scope(env_);
 
-    while (cancelledJobs.size()) {
-      std::shared_ptr<Orchestrator::Job> cancelledJob = cancelledJobs.front();
-      std::shared_ptr<Orchestrator::AsyncWorkJob> asyncWorkJob = std::static_pointer_cast<Orchestrator::AsyncWorkJob>(cancelledJob);
+      while (cancelledJobs.size()) {
+        std::shared_ptr<Orchestrator::Job> cancelledJob = cancelledJobs.front();
+        std::shared_ptr<Orchestrator::AsyncWorkJob> asyncWorkJob = std::static_pointer_cast<Orchestrator::AsyncWorkJob>(cancelledJob);
 
-      asyncWorkJob->worker->Cancel();
-      asyncWorkJob->worker->WorkComplete();
-      asyncWorkJob->worker->Destroy();
+        asyncWorkJob->worker->Cancel();
+        asyncWorkJob->worker->WorkComplete();
+        asyncWorkJob->worker->Destroy();
 
-      cancelledJobs.pop();
+        cancelledJobs.pop();
+      }
+    } catch (const Napi::Error &e) {
+      // Swallow N-API errors during worker teardown — the env may be invalid
+    } catch (...) {
+      // Swallow any C++ exceptions during teardown
     }
 
     // We need to cancel all callbacks that were scheduled before the shutdown

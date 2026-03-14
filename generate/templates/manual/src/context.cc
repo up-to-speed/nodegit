@@ -22,6 +22,7 @@ namespace nodegit {
     // us from referring to context on cleanupHandle if we're also intending to move
     // the unique_ptr into the method.
     Context *context = cleanupHandle->context;
+    context->MarkWorkerCleanup();
     context->ShutdownThreadPool(std::move(cleanupHandle));
   }
 
@@ -42,7 +43,9 @@ namespace nodegit {
   }
 
   Context::~Context() {
-    nodegit::TrackerWrap::DeleteFromList(&trackerList);
+    if (!isWorkerCleanup_) {
+      nodegit::TrackerWrap::DeleteFromList(&trackerList);
+    }
     if (currentThreadContext == this) {
       currentThreadContext = nullptr;
     }

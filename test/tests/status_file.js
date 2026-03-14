@@ -30,11 +30,11 @@ describe("StatusFile", function() {
     assert.ok(statusFile[specialFunction]());
   }
 
-  it.skip("identifies the proper statuses for CURRENT", function() {
+  it("identifies the proper statuses for CURRENT", function() {
     testStatusFile("CURRENT");
   });
 
-  it.skip("identifies the proper statuses for WT_UNREADABLE", function() {
+  it("identifies the proper statuses for WT_UNREADABLE", function() {
     testStatusFile("WT_UNREADABLE");
   });
 

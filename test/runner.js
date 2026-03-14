@@ -72,6 +72,10 @@ before(function() {
 
   return setupRepos
     .then(function() {
+      // Remove stale lock files left by terminated workers
+      return fse.remove(path.join(workdirPath, ".git", "index.lock")).catch(function() {});
+    })
+    .then(function() {
       //to checkout the longpaths-checkout branch
       if(process.platform === "win32") {
         return exec("git config core.longpaths true", {cwd: workdirPath});
@@ -267,7 +271,7 @@ afterEach(function(done) {
     if (global.gc) {
       global.gc();
     } else if (typeof Bun !== "undefined" && Bun.gc) {
-      Bun.gc();
+      Bun.gc(true);
     }
     done();
   });

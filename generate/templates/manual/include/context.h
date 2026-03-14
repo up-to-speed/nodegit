@@ -41,6 +41,8 @@ namespace nodegit {
 
     void ShutdownThreadPool(std::unique_ptr<AsyncContextCleanupHandle> cleanupHandle);
 
+    void MarkWorkerCleanup() { isWorkerCleanup_ = true; }
+
     inline void LinkTrackerList(nodegit::TrackerWrap::TrackerList *list) {
       list->Link(&trackerList);
     }
@@ -67,6 +69,7 @@ namespace nodegit {
     std::map<std::string, std::shared_ptr<CleanupHandle>> cleanupHandles;
 
     nodegit::TrackerWrap::TrackerList trackerList;
+    bool isWorkerCleanup_ = false;
 
     static std::map<napi_env, Context *> contexts;
     static thread_local Context *currentThreadContext;

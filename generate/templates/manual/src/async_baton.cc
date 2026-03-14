@@ -22,7 +22,9 @@ namespace nodegit {
   }
 
   void AsyncBaton::SetCallbackError(Napi::Value error) {
-    callbackErrorHandle.Reset(error, 1);
+    if (!error.IsEmpty() && !error.IsUndefined() && !error.IsNull()) {
+      callbackErrorHandle.Reset(error, 1);
+    }
   }
 
   void AsyncBaton::ExecuteAsyncPerform(AsyncCallback asyncCallback, AsyncCallback asyncCancelCb, CompletionCallback onCompletion) {

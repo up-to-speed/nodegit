@@ -354,7 +354,8 @@ describe("Revwalk", function() {
   // This test requires forcing garbage collection, so mocha needs to be run
   // via node rather than npm, with a la `node --expose-gc [pathtohmoca]
   // [testglob]`
-  var testGC = global.gc ? it : it.skip;
+  var hasGC = global.gc || (typeof Bun !== "undefined" && Bun.gc);
+  var testGC = hasGC ? it : it.skip;
 
   testGC("doesnt segfault when accessing .author() twice", function(done) {
     Repository.open(reposPath).then(function(repository) {
@@ -371,7 +372,8 @@ describe("Revwalk", function() {
             commit.author().email();
 
             if ( i % 250 === 0) {
-              global.gc();
+              if (global.gc) { global.gc(); }
+              else if (typeof Bun !== "undefined" && Bun.gc) { Bun.gc(true); }
             }
           }
         });

@@ -95,6 +95,14 @@
                   "<(electron_openssl_root)/lib/libssl.a",
                   "<(electron_openssl_root)/lib/libcrypto.a"
                 ]
+              }],
+              ["<(is_electron) != 1", {
+                "include_dirs": [
+                  "<!(pkg-config --cflags-only-I openssl 2>/dev/null | sed 's/-I//g' || true)"
+                ],
+                "libraries": [
+                  "<!@(pkg-config --libs openssl 2>/dev/null || echo '')"
+                ]
               }]
             ],
             "xcode_settings": {

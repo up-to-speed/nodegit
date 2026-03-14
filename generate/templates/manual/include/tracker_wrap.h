@@ -14,7 +14,7 @@ namespace nodegit {
   class TrackerWrap {
   public:
     TrackerWrap() = default;
-    virtual ~TrackerWrap() = default;
+    virtual ~TrackerWrap() { Unlink(); }
     TrackerWrap(const TrackerWrap &other) = delete;
     TrackerWrap(TrackerWrap &&other) = delete;
     TrackerWrap& operator=(const TrackerWrap &other) = delete;

@@ -352,7 +352,7 @@ describe("Remote", function() {
   });
 
   if (!isNode8) {
-    it.skip("will reject if credentials promise rejects", function() {
+    it("will reject if credentials promise rejects", function() {
       this.timeout(600000);
       var repo = this.repository;
       var branch = "should-not-exist";
@@ -422,7 +422,7 @@ describe("Remote", function() {
           });
         });
 
-        it.skip("cannot push to a repository with invalid credentials", function() {
+        it("cannot push to a repository with invalid credentials", function() {
           this.timeout(600000);
           var repo = this.repository;
           var branch = "should-not-exist";
