@@ -50,7 +50,7 @@ Napi::Value GitTree::GetAllFilepaths(const Napi::CallbackInfo& info)
   baton->repo = git_tree_owner(baton->tree);
 
   Napi::FunctionReference callback;
-  callback.Reset(info[info.Length() - 1].As<Napi::Function>());
+  callback.Reset(info[info.Length() - 1].As<Napi::Function>(), 1);
   std::map<std::string, std::shared_ptr<nodegit::CleanupHandle>> cleanupHandles;
   GetAllFilepathsWorker *worker = new GetAllFilepathsWorker(baton, std::move(callback), cleanupHandles);
   worker->Reference<GitTree>("tree", info.This().As<Napi::Object>());

@@ -86,7 +86,7 @@ Napi::Value GitClone::Clone(const Napi::CallbackInfo& info) {
   baton->local_path = from_local_path;
 
   Napi::FunctionReference callback;
-  callback.Reset(info[info.Length() - 1].As<Napi::Function>());
+  callback.Reset(info[info.Length() - 1].As<Napi::Function>(), 1);
   CloneWorker *worker = new CloneWorker(baton, std::move(callback), cleanupHandles);
 
   worker->Reference("url", info[0]);

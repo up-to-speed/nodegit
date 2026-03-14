@@ -409,7 +409,7 @@ Napi::Value GitRepository::RefreshReferences(const Napi::CallbackInfo& info)
   baton->repo = GitRepository::Unwrap(info.This().As<Napi::Object>())->GetValue();
 
   Napi::FunctionReference callback;
-  callback.Reset(info[info.Length() - 1].As<Napi::Function>());
+  callback.Reset(info[info.Length() - 1].As<Napi::Function>(), 1);
   std::map<std::string, std::shared_ptr<nodegit::CleanupHandle>> cleanupHandles;
   RefreshReferencesWorker *worker = new RefreshReferencesWorker(baton, std::move(callback), cleanupHandles);
   worker->Reference<GitRepository>("repo", info.This().As<Napi::Object>());

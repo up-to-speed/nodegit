@@ -22,7 +22,7 @@ Napi::Value GitRevwalk::FastWalk(const Napi::CallbackInfo& info)
   baton->walk = GitRevwalk::Unwrap(info.This().As<Napi::Object>())->GetValue();
 
   Napi::FunctionReference callback;
-  callback.Reset(info[info.Length() - 1].As<Napi::Function>());
+  callback.Reset(info[info.Length() - 1].As<Napi::Function>(), 1);
   std::map<std::string, std::shared_ptr<nodegit::CleanupHandle>> cleanupHandles;
   FastWalkWorker *worker = new FastWalkWorker(baton, std::move(callback), cleanupHandles);
   worker->Reference<GitRevwalk>("fastWalk", info.This().As<Napi::Object>());

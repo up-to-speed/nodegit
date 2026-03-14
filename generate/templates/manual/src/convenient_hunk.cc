@@ -91,7 +91,7 @@ Napi::Value ConvenientHunk::Lines(const Napi::CallbackInfo& info) {
   baton->lines->reserve(baton->hunk->numLines);
 
   Napi::FunctionReference callback;
-  callback.Reset(info[0].As<Napi::Function>());
+  callback.Reset(info[0].As<Napi::Function>(), 1);
   LinesWorker *worker = new LinesWorker(baton, std::move(callback));
 
   worker->Reference<ConvenientHunk>("hunk", info.This().As<Napi::Object>());

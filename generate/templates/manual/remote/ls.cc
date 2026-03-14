@@ -14,7 +14,7 @@ Napi::Value GitRemote::ReferenceList(const Napi::CallbackInfo& info)
   baton->remote = GitRemote::Unwrap(info.This().As<Napi::Object>())->GetValue();
 
   Napi::FunctionReference callback;
-  callback.Reset(info[info.Length() - 1].As<Napi::Function>());
+  callback.Reset(info[info.Length() - 1].As<Napi::Function>(), 1);
   std::map<std::string, std::shared_ptr<nodegit::CleanupHandle>> cleanupHandles;
   ReferenceListWorker *worker = new ReferenceListWorker(baton, std::move(callback), cleanupHandles);
   worker->Reference<GitRemote>("remote", info.This().As<Napi::Object>());

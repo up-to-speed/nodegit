@@ -81,7 +81,7 @@ Napi::Value GitFilterRegistry::GitFilterRegister(const Napi::CallbackInfo& info)
   baton->filter_priority = info[2].As<Napi::Number>().Int32Value();
 
   Napi::FunctionReference callback;
-  callback.Reset(info[3].As<Napi::Function>());
+  callback.Reset(info[3].As<Napi::Function>(), 1);
   RegisterWorker *worker = new RegisterWorker(baton, std::move(callback), cleanupHandles);
 
   worker->Reference("filter_name", info[0]);
@@ -192,7 +192,7 @@ Napi::Value GitFilterRegistry::GitFilterUnregister(const Napi::CallbackInfo& inf
 
   /* Setting up Async Worker */
   Napi::FunctionReference callback;
-  callback.Reset(info[1].As<Napi::Function>());
+  callback.Reset(info[1].As<Napi::Function>(), 1);
   UnregisterWorker *worker = new UnregisterWorker(baton, std::move(callback));
 
   nodegit::Context *nodegitContext = nodegit::Context::GetCurrentContext();

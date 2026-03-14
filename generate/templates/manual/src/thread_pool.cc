@@ -670,13 +670,6 @@ namespace nodegit {
 
   // NOTE this should theoretically never be triggered during a cleanup operation
   void ThreadPoolImpl::RunLoopCallbacks() {
-    // If the thread pool is being torn down, skip callback processing.
-    // The env may be invalid (e.g., during process.exit() after
-    // worker.terminate()). Creating a HandleScope on a dead env crashes.
-    if (isMarkedForDeletion) {
-      return;
-    }
-
     Napi::HandleScope scope(env_);
 
     std::unique_lock<std::mutex> lock(*jsThreadCallbackMutex);
@@ -691,9 +684,8 @@ namespace nodegit {
     try {
       jsThreadCallback.performCallback();
     } catch (const Napi::Error &e) {
-      // Catch N-API errors to prevent them from propagating through the TSFN
-      // dispatcher. Bun's TSFN implementation panics on uncaught C++ exceptions.
-      // The error has already been thrown into the JS engine by Napi::Error.
+      // N-API errors are already pending in the JS engine.
+      // Catch to prevent Bun's TSFN dispatcher from panicking on C++ exceptions.
     } catch (...) {
       // Catch any other C++ exceptions to prevent TSFN dispatcher crashes.
     }

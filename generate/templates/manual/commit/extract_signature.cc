@@ -60,7 +60,7 @@ Napi::Value GitCommit::ExtractSignature(const Napi::CallbackInfo& info)
   }
 
   Napi::FunctionReference callback;
-  callback.Reset(info[info.Length() - 1].As<Napi::Function>());
+  callback.Reset(info[info.Length() - 1].As<Napi::Function>(), 1);
 
   std::map<std::string, std::shared_ptr<nodegit::CleanupHandle>> cleanupHandles;
   ExtractSignatureWorker *worker = new ExtractSignatureWorker(baton, std::move(callback), cleanupHandles);

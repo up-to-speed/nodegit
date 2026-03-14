@@ -1766,7 +1766,7 @@ Napi::Value GitRepository::Statistics(const Napi::CallbackInfo& info)
   baton->out = static_cast<void *>(new RepoAnalysis(baton->repo));
 
   Napi::FunctionReference callback;
-  callback.Reset(info[info.Length() - 1].As<Napi::Function>());
+  callback.Reset(info[info.Length() - 1].As<Napi::Function>(), 1);
   std::map<std::string, std::shared_ptr<nodegit::CleanupHandle>> cleanupHandles;
   StatisticsWorker *worker = new StatisticsWorker(baton, std::move(callback), cleanupHandles);
   worker->Reference<GitRepository>("repo", info.This().As<Napi::Object>());

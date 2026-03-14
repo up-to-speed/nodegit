@@ -208,7 +208,7 @@ Napi::Value ConvenientPatch::Hunks(const Napi::CallbackInfo& info) {
   baton->hunks->reserve(baton->patch->numHunks);
 
   Napi::FunctionReference callback;
-  callback.Reset(info[0].As<Napi::Function>());
+  callback.Reset(info[0].As<Napi::Function>(), 1);
   HunksWorker *worker = new HunksWorker(baton, std::move(callback));
 
   worker->Reference<ConvenientPatch>("patch", info.This().As<Napi::Object>());

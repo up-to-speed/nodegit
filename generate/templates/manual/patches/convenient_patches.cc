@@ -33,7 +33,7 @@ Napi::Value GitPatch::ConvenientFromDiff(const Napi::CallbackInfo& info) {
   baton->out->reserve(git_diff_num_deltas(baton->diff));
 
   Napi::FunctionReference callback;
-  callback.Reset(info[info.Length() - 1].As<Napi::Function>());
+  callback.Reset(info[info.Length() - 1].As<Napi::Function>(), 1);
   std::map<std::string, std::shared_ptr<nodegit::CleanupHandle>> cleanupHandles;
   ConvenientFromDiffWorker *worker = new ConvenientFromDiffWorker(baton, std::move(callback), cleanupHandles);
 

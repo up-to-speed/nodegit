@@ -96,7 +96,7 @@ Napi::Value GitFilterList::Load(const Napi::CallbackInfo& info) {
   baton->flags = from_flags;
 
   Napi::FunctionReference callback;
-  callback.Reset(info[info.Length() - 1].As<Napi::Function>());
+  callback.Reset(info[info.Length() - 1].As<Napi::Function>(), 1);
   std::map<std::string, std::shared_ptr<nodegit::CleanupHandle>> cleanupHandles;
   LoadWorker *worker = new LoadWorker(baton, std::move(callback), cleanupHandles);
 

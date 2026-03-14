@@ -222,7 +222,7 @@ Napi::Value GitRevwalk::FileHistoryWalk(const Napi::CallbackInfo& info)
   baton->walk = GitRevwalk::Unwrap(info.This().As<Napi::Object>())->GetValue();
 
   Napi::FunctionReference callback;
-  callback.Reset(info[info.Length() - 1].As<Napi::Function>());
+  callback.Reset(info[info.Length() - 1].As<Napi::Function>(), 1);
   std::map<std::string, std::shared_ptr<nodegit::CleanupHandle>> cleanupHandles;
   FileHistoryWalkWorker *worker = new FileHistoryWalkWorker(baton, std::move(callback), cleanupHandles);
   worker->Reference<GitRevwalk>("fileHistoryWalk", info.This().As<Napi::Object>());
