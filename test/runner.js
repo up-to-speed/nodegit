@@ -3,8 +3,6 @@ var path = require("path");
 var local = path.join.bind(path, __dirname);
 var _exec = require('../utils/execPromise');
 
-var NodeGit = require('..');
-
 var workdirPath = local("repos/workdir");
 var constWorkdirPath = local("repos/constworkdir");
 var masterSha;
@@ -21,7 +19,7 @@ function exec(command, opts) {
 var gitDir;
 var gitBackupDir;
 
-const testRepos = [
+var testRepos = [
   "repos/bare",
   "repos/blameRepo",
   "repos/cherrypick",
@@ -222,15 +220,17 @@ before(function() {
       return fse.ensureDir(local("home"));
     })
     .then(function() {
-      return fse.writeFile(local("home", ".gitconfig"),
-        "[user]\n  name = John Doe\n  email = johndoe@example.com");
-    })
-    .then( async function() {
-      //mark all test repos as safe
-      for(let repo of testRepos) {
-        await exec(`git config --global --add safe.directory ${local(repo)}`);
-      }
-    })
+      // Write safe.directory entries to a local .gitconfig in test/home/
+      // instead of the user's global config, to avoid polluting the
+      // developer's real Git config or failing in read-only environments.
+      var gitConfig = "[user]\n" +
+        "  name = John Doe\n" +
+        "  email = johndoe@example.com\n" +
+        testRepos.map(function(repo) {
+          return "[safe]\n  directory = " + local(repo);
+        }).join("\n");
+      return fse.writeFile(local("home", ".gitconfig"), gitConfig);
+    });
 });
 
 beforeEach(function() {

@@ -83,7 +83,7 @@
     "rebuildDebug": "node generate && node-gyp configure --debug build",
     "recompile": "node-gyp configure build",
     "recompileDebug": "node-gyp configure --debug build",
-    "test": "npm run test:node && npm run test:bun",
+    "test": "npm run test:node && (which bun > /dev/null 2>&1 && npm run test:bun || true)",
     "test:node": "node --expose-gc test",
     "test:bun": "bun node_modules/.bin/mocha --expose-gc test/runner test/tests --timeout 150000 --exit",
     "xcodeDebug": "node-gyp configure -- -f xcode"

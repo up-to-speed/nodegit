@@ -422,6 +422,48 @@ describe("Remote", function() {
           });
         });
 
+        it("does not persist credential rejection across reused options",
+          function() {
+            var repo = this.repository;
+            var branch = "should-not-exist";
+            var callCount = 0;
+            var options = {
+              callbacks: {
+                credentials: function() {
+                  callCount++;
+                  return Promise.resolve().then(function() {
+                    return Promise.reject(new Error("failure case"));
+                  });
+                },
+                certificateCheck: () => 0
+              }
+            };
+
+            function expectFailure(remote) {
+              var ref = "refs/heads/" + branch;
+              var refs = [ref + ":" + ref];
+
+              return remote.push(refs, options)
+                .then(function() {
+                  return Promise.reject(
+                    new Error("should not be able to push to the repository"));
+                }, function(err) {
+                  assert.equal(err.message, "failure case");
+                });
+            }
+
+            return Remote.lookup(repo, "origin")
+              .then(function(remote) {
+                return expectFailure(remote)
+                  .then(function() {
+                    return expectFailure(remote);
+                  });
+              })
+              .then(function() {
+                assert.equal(callCount, 2);
+              });
+          });
+
         it("cannot push to a repository with invalid credentials", function() {
           this.timeout(600000);
           var repo = this.repository;
