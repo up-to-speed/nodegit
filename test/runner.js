@@ -44,6 +44,11 @@ before(function() {
 
   gitDir = path.join(workdirPath, ".git");
 
+  // Remove stale lock files from prior test runs (e.g. from terminated workers)
+  ["index.lock", "HEAD.lock"].forEach(function(f) {
+    try { fse.removeSync(path.join(gitDir, f)); } catch (e) {}
+  });
+
   // Check if repos already exist (e.g. from a prior test:node run)
   var reposExist = fse.existsSync(workdirPath) &&
                    fse.existsSync(constWorkdirPath);
@@ -101,7 +106,24 @@ before(function() {
     })
     .then(function(sha) {
       masterSha = sha.trim();
-      return exec("git reset --hard " + masterSha, {cwd: workdirPath});
+      function resetWithRetry(attempts) {
+        return fse.remove(path.join(workdirPath, ".git", "index.lock"))
+          .catch(function() {})
+          .then(function() {
+            return exec("git reset --hard " + masterSha, {cwd: workdirPath});
+          })
+          .catch(function(err) {
+            if (attempts > 0) {
+              return new Promise(function(resolve) {
+                setTimeout(resolve, 500);
+              }).then(function() {
+                return resetWithRetry(attempts - 1);
+              });
+            }
+            throw err;
+          });
+      }
+      return resetWithRetry(3);
     })
     .then(function() {
       // Clear stashes before any test file's before() hook opens the repo
@@ -210,9 +232,9 @@ beforeEach(function() {
   })
   .then(function() {
     // Restore git config, packed-refs, and key ref directories from backup
-    // Only restore refs/heads, refs/remotes, refs/tags — leave refs/notes
-    // and other directories alone since describe-level before() hooks may
-    // create them
+    if (!gitBackupDir || !fse.existsSync(gitBackupDir)) {
+      return Promise.resolve();
+    }
     return Promise.all([
       fse.copy(path.join(gitBackupDir, "config"),
                path.join(gitDir, "config"), {overwrite: true}),
