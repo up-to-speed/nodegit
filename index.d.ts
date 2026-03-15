@@ -106,6 +106,17 @@ declare module "bungit" {
     wdId(): Oid | null;
   }
 
+  class Config {
+    getBool(name: string): Promise<boolean>;
+    getInt32(name: string): Promise<number>;
+    getInt64(name: string): Promise<number>;
+    getString(name: string): Promise<string>;
+    setString(name: string, value: string): Promise<number>;
+    setBool(name: string, value: boolean): Promise<number>;
+    setInt32(name: string, value: number): Promise<number>;
+    setInt64(name: string, value: number): Promise<number>;
+  }
+
   class Repository {
     static open(path: string): Promise<Repository>;
     static init(path: string, isBare: number): Promise<Repository>;
@@ -113,6 +124,7 @@ declare module "bungit" {
     workdir(): string | null;
     path(): string;
     odb(): Promise<Odb>;
+    config(): Promise<Config>;
     hashfile(
       path: string,
       type: Object.TYPE,
@@ -203,6 +215,7 @@ declare module "bungit" {
     Ignore: typeof Ignore;
     Filter: typeof Filter;
     FilterList: typeof FilterList;
+    Config: typeof Config;
     Reference: typeof Reference;
     Submodule: typeof Submodule;
   };
