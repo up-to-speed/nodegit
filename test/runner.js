@@ -1,13 +1,23 @@
 var fse = require("fs-extra");
 var path = require("path");
 var local = path.join.bind(path, __dirname);
-var exec = require('../utils/execPromise');
+var _exec = require('../utils/execPromise');
 
 var NodeGit = require('..');
 
 var workdirPath = local("repos/workdir");
 var constWorkdirPath = local("repos/constworkdir");
 var masterSha;
+
+// Wrap exec to remove stale git locks before any git command
+function exec(command, opts) {
+  if (opts && opts.cwd && command.startsWith("git ")) {
+    try {
+      fse.removeSync(path.join(opts.cwd, ".git", "index.lock"));
+    } catch (e) {}
+  }
+  return _exec(command, opts);
+}
 var gitDir;
 var gitBackupDir;
 

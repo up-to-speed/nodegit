@@ -101,7 +101,8 @@ if (Worker) {
         worker.on("error", () => {});
         worker.on("exit", (code) => {
           if (code === TERMINATED_EXIT_CODE) {
-            done();
+            // Delay to let native threads release locks after termination
+            setTimeout(done, 1000);
           } else {
             assert.fail();
           }
@@ -144,7 +145,7 @@ if (Worker) {
       worker.on("error", () => {});
       worker.on("exit", (code) => {
         if (code === TERMINATED_EXIT_CODE && testOk === true) {
-          done();
+          setTimeout(done, 1000);
         }
         else {
           assert.fail();
@@ -217,7 +218,7 @@ if (Worker) {
       worker.on("error", () => {});
       worker.on("exit", (code) => {
         if (code === TERMINATED_EXIT_CODE && testOk === true) {
-          done();
+          setTimeout(done, 1000);
         }
         else {
           assert.fail();
