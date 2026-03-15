@@ -101,8 +101,15 @@ before(function() {
     })
     .then(function() {
       // Use the SHA from refs/remotes directly, not the remote name,
-      // in case config is corrupted from prior test runs
-      return exec("git rev-parse refs/remotes/origin/master", {cwd: workdirPath});
+      // in case config is corrupted from prior test runs.
+      // If refs are missing (e.g. after git clean wiped packed-refs), re-fetch.
+      return exec("git rev-parse refs/remotes/origin/master", {cwd: workdirPath})
+        .catch(function() {
+          return exec("git fetch origin", {cwd: workdirPath})
+            .then(function() {
+              return exec("git rev-parse refs/remotes/origin/master", {cwd: workdirPath});
+            });
+        });
     })
     .then(function(sha) {
       masterSha = sha.trim();
@@ -224,7 +231,7 @@ beforeEach(function() {
     fse.remove(path.join(gitDir, "HEAD.lock")).catch(function() {})
   ])
   .then(function() {
-    return exec("git clean -xdf", {cwd: workdirPath});
+    return exec("git clean -xdf", {cwd: workdirPath}).catch(function() {});
   })
   .then(function() {
     // Abort any in-progress merge/rebase
@@ -272,7 +279,17 @@ beforeEach(function() {
       });
   })
   .then(function() {
-    return exec("git reset --hard " + masterSha, {cwd: workdirPath});
+    // Remove locks again before reset — a terminated worker's native thread
+    // may have recreated a lock file after our earlier removal
+    return fse.remove(path.join(gitDir, "index.lock")).catch(function() {})
+      .then(function() {
+        return exec("git reset --hard " + masterSha, {cwd: workdirPath});
+      })
+      .catch(function() {
+        // Last resort: remove locks and try one more time
+        try { fse.removeSync(path.join(gitDir, "index.lock")); } catch (e) {}
+        return exec("git reset --hard " + masterSha, {cwd: workdirPath});
+      });
   })
   .then(function() {
     // Clean up stashes and merge/rebase state files
