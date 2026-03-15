@@ -53,6 +53,44 @@ declare module "bungit" {
     static clearInternalRules(repo: Repository): Promise<void>;
   }
 
+  namespace Filter {
+    enum MODE {
+      TO_WORKTREE = 0,
+      SMUDGE = 0,
+      TO_ODB = 1,
+      CLEAN = 1,
+    }
+
+    enum FLAG {
+      DEFAULT = 0,
+      ALLOW_UNSAFE = 1,
+      NO_SYSTEM_ATTRIBUTES = 2,
+      ATTRIBUTES_FROM_HEAD = 4,
+      ATTRIBUTES_FROM_COMMIT = 8,
+    }
+  }
+
+  class FilterList {
+    static load(
+      repo: Repository,
+      blob: Blob | null,
+      path: string,
+      mode: Filter.MODE,
+      flags: Filter.FLAG,
+    ): Promise<FilterList | null>;
+
+    applyToFile(repo: Repository, path: string): Promise<string | Buffer>;
+    applyToData(data: string): Promise<string | Buffer>;
+  }
+
+  class Submodule {
+    static lookup(repo: Repository, name: string): Promise<Submodule>;
+
+    headId(): Oid | null;
+    indexId(): Oid | null;
+    wdId(): Oid | null;
+  }
+
   class Repository {
     static open(path: string): Promise<Repository>;
     static init(path: string, isBare: number): Promise<Repository>;
@@ -148,6 +186,9 @@ declare module "bungit" {
     Blob: typeof Blob;
     Mempack: typeof Mempack;
     Ignore: typeof Ignore;
+    Filter: typeof Filter;
+    FilterList: typeof FilterList;
+    Submodule: typeof Submodule;
   };
 
   export = _default;
