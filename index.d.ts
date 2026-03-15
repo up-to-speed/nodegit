@@ -83,6 +83,21 @@ declare module "bungit" {
     applyToData(data: string): Promise<string | Buffer>;
   }
 
+  class Reference {
+    static nameToId(repo: Repository, name: string): Promise<Oid>;
+    static lookup(
+      repo: Repository,
+      name: string,
+      len?: number,
+    ): Promise<Reference>;
+
+    name(): string;
+    target(): Oid;
+    isBranch(): boolean;
+    isTag(): boolean;
+    isRemote(): boolean;
+  }
+
   class Submodule {
     static lookup(repo: Repository, name: string): Promise<Submodule>;
 
@@ -188,6 +203,7 @@ declare module "bungit" {
     Ignore: typeof Ignore;
     Filter: typeof Filter;
     FilterList: typeof FilterList;
+    Reference: typeof Reference;
     Submodule: typeof Submodule;
   };
 
