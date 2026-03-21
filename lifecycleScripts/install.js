@@ -2,10 +2,16 @@ var buildFlags = require("../utils/buildFlags");
 var spawn = require("child_process").spawn;
 var path = require("path");
 
-const nodePreGypModulePath = require.resolve("@mapbox/node-pre-gyp");
-
 module.exports = function install() {
   console.log("[nodegit] Running install script");
+
+  var nodePreGypModulePath;
+  try {
+    nodePreGypModulePath = require.resolve("@mapbox/node-pre-gyp");
+  } catch (e) {
+    console.error("[nodegit] Could not resolve @mapbox/node-pre-gyp:", e.message);
+    return Promise.reject(e);
+  }
 
   var nodePreGyp = "node-pre-gyp";
 

@@ -55,17 +55,19 @@ jobs:
           ssh-add ~/.ssh_tests/id_rsa
           node utils/retry npm test
 
-      - name: Deploy
+      - name: Package prebuild
         if: startsWith(github.ref, 'refs/tags/v')
-        env:
-          node_pre_gyp_bucket: ${{ secrets.node_pre_gyp_bucket }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.node_pre_gyp_accessKeyId }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.node_pre_gyp_secretAccessKey }}
         run: |
-          npm install -g @mapbox/node-pre-gyp aws-sdk
+          npm install -g @mapbox/node-pre-gyp
           node lifecycleScripts/clean
           node-pre-gyp package
-          node-pre-gyp publish
+
+      - name: Upload prebuild artifact
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v4
+        with:
+          name: prebuild-linux-x64-node${{ matrix.node }}
+          path: build/stage/**/*.tar.gz
 
   macos-tests:
     name: "macOS Tests"
@@ -105,17 +107,19 @@ jobs:
           ssh-add ~/.ssh_tests/id_rsa
           node utils/retry npm test
 
-      - name: Deploy
+      - name: Package prebuild
         if: startsWith(github.ref, 'refs/tags/v')
-        env:
-          node_pre_gyp_bucket: ${{ secrets.node_pre_gyp_bucket }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.node_pre_gyp_accessKeyId }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.node_pre_gyp_secretAccessKey }}
         run: |
-          npm install -g @mapbox/node-pre-gyp aws-sdk
+          npm install -g @mapbox/node-pre-gyp
           node lifecycleScripts/clean
           node-pre-gyp package
-          node-pre-gyp publish
+
+      - name: Upload prebuild artifact
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v4
+        with:
+          name: prebuild-macos-${{ matrix.arch }}-node${{ matrix.node }}
+          path: build/stage/**/*.tar.gz
 
   windows-tests:
     name: Windows Tests
@@ -172,25 +176,40 @@ jobs:
           powershell -command "Start-Process .\vendor\pageant\pageant_${{ matrix.arch }}.exe $finalPath"
           node utils/retry npm test
 
-      # You're probably wondering why this isn't a single `run: |` step, it certainly is for *nix,
-      # but it's not, because the CI runner for windows doesn't wait for each step as listed here
-      # and it treats each additional step past the first as an orphaned process.
-      - name: Deploy (Dependencies)
+      - name: Package prebuild
         if: startsWith(github.ref, 'refs/tags/v')
-        run: npm install -g @mapbox/node-pre-gyp aws-sdk
+        run: |
+          npm install -g @mapbox/node-pre-gyp
+          node lifecycleScripts\clean
+          node-pre-gyp package --target_arch=${{ matrix.arch }}
 
-      - name: Deploy (Clean)
+      - name: Upload prebuild artifact
         if: startsWith(github.ref, 'refs/tags/v')
-        run: node lifecycleScripts\clean
+        uses: actions/upload-artifact@v4
+        with:
+          name: prebuild-windows-${{ matrix.arch }}-node${{ matrix.node }}
+          path: build/stage/**/*.tar.gz
 
-      - name: Deploy (Package)
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: node-pre-gyp package --target_arch=${{ matrix.arch }}
+  publish-release:
+    name: Publish GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [linux-tests, macos-tests, windows-tests]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all prebuild artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: prebuild-*
+          path: prebuilds
+          merge-multiple: true
 
-      - name: Deploy (Publish)
-        if: startsWith(github.ref, 'refs/tags/v')
-        env:
-          node_pre_gyp_bucket: ${{ secrets.node_pre_gyp_bucket }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.node_pre_gyp_accessKeyId }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.node_pre_gyp_secretAccessKey }}
-        run: node-pre-gyp publish --target_arch=${{ matrix.arch }}
+      - name: List prebuilds
+        run: find prebuilds -type f
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: prebuilds/**/*.tar.gz
+          generate_release_notes: true
