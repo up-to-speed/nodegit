@@ -60,11 +60,13 @@
 
       "defines": [
         "NAPI_VERSION=8",
-        "NODE_ADDON_API_DISABLE_DEPRECATED"
+        "NODE_ADDON_API_DISABLE_DEPRECATED",
+        "NAPI_CPP_EXCEPTIONS"
       ],
 
       "cflags": [
-        "-Wall"
+        "-Wall",
+        "-fexceptions"
       ],
 
       "conditions": [
@@ -133,7 +135,8 @@
             ],
             "defines": [
               "_HAS_EXCEPTIONS=1",
-              "NOMINMAX=1"
+              "NOMINMAX=1",
+              "WIN32_LEAN_AND_MEAN=1"
             ],
             "msvs_settings": {
               "VCCLCompilerTool": {
@@ -161,6 +164,9 @@
           ]
         }],
         ["OS=='linux' or OS.endswith('bsd') or <(is_IBMi) == 1", {
+          "cflags_cc": [
+            "-fexceptions"
+          ],
           "conditions": [
             ["<(has_cxxflags) == 0", {
               "cflags_cc": [
