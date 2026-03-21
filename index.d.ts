@@ -21,6 +21,11 @@ declare module "bungit" {
     }
   }
 
+  /** A libgit2 object returned by Revparse.single. Use .id() to get the Oid. */
+  class GitObject {
+    id(): Oid;
+  }
+
   class OdbObject {
     type(): Object.TYPE;
     size(): number;
@@ -90,20 +95,29 @@ declare module "bungit" {
       name: string,
       len?: number,
     ): Promise<Reference>;
+    static list(repo: Repository): Promise<string[]>;
 
     name(): string;
     target(): Oid;
     isBranch(): boolean;
     isTag(): boolean;
     isRemote(): boolean;
+    isSymbolic(): boolean;
+    symbolicTarget(): string;
+    resolve(): Promise<Reference>;
   }
 
   class Submodule {
     static lookup(repo: Repository, name: string): Promise<Submodule>;
+    static foreach(
+      repo: Repository,
+      callback: (submodule: Submodule, name: string) => number,
+    ): Promise<void>;
 
     headId(): Oid | null;
     indexId(): Oid | null;
     wdId(): Oid | null;
+    path(): string;
   }
 
   class Config {
@@ -131,7 +145,6 @@ declare module "bungit" {
       asPath?: string,
     ): Promise<Oid>;
     refreshIndex(): Promise<Index>;
-    free(): void;
   }
 
   class Index {
@@ -173,6 +186,7 @@ declare module "bungit" {
     name(): string;
     path(): string;
     oid(): Oid;
+    id(): Oid;
     filemode(): number;
     isFile(): boolean;
     isTree(): boolean;
@@ -196,8 +210,80 @@ declare module "bungit" {
   }
 
   class Blob {
+    static lookup(repo: Repository, oid: Oid): Promise<Blob>;
+
     content(): Buffer;
     rawsize(): number;
+  }
+
+  class Commit {
+    static lookup(repo: Repository, oid: Oid): Promise<Commit>;
+
+    sha(): string;
+    summary(): string;
+    author(): Signature;
+    date(): Date;
+    parentcount(): number;
+    parentId(n: number): Oid;
+    getTree(): Promise<Tree>;
+  }
+
+  class Signature {
+    name(): string;
+    email(): string;
+  }
+
+  namespace Revparse {
+    function single(repo: Repository, spec: string): Promise<GitObject>;
+
+    enum MODE {
+      SINGLE = 1,
+      RANGE = 2,
+      MERGE_BASE = 4,
+    }
+  }
+
+  class Revwalk {
+    static create(repo: Repository): Revwalk;
+
+    sorting(sort: number): void;
+    push(oid: Oid): void;
+    pushHead(): void;
+    hide(oid: Oid): void;
+    next(): Promise<Oid>;
+    getCommits(count: number): Promise<Commit[]>;
+  }
+
+  namespace Revwalk {
+    const SORT: {
+      NONE: 0;
+      TOPOLOGICAL: 1;
+      TIME: 2;
+      REVERSE: 4;
+    };
+  }
+
+  namespace Merge {
+    function base(repo: Repository, one: Oid, two: Oid): Promise<Oid>;
+  }
+
+  namespace Graph {
+    function aheadBehind(
+      repo: Repository,
+      local: Oid,
+      upstream: Oid,
+    ): Promise<{ ahead: number; behind: number }>;
+  }
+
+  class Remote {
+    static lookup(repo: Repository, name: string): Promise<Remote>;
+
+    url(): string;
+    name(): string;
+  }
+
+  namespace Branch {
+    function upstream(ref: Reference): Promise<Reference>;
   }
 
   const _default: {
@@ -205,12 +291,14 @@ declare module "bungit" {
     Oid: typeof Oid;
     Odb: typeof Odb;
     Object: typeof Object;
+    GitObject: typeof GitObject;
     Index: typeof Index;
     IndexEntry: typeof IndexEntry;
     Tree: typeof Tree;
     TreeEntry: typeof TreeEntry;
     Treebuilder: typeof Treebuilder;
     Blob: typeof Blob;
+    Commit: typeof Commit;
     Mempack: typeof Mempack;
     Ignore: typeof Ignore;
     Filter: typeof Filter;
@@ -218,6 +306,13 @@ declare module "bungit" {
     Config: typeof Config;
     Reference: typeof Reference;
     Submodule: typeof Submodule;
+    Revparse: typeof Revparse;
+    Revwalk: typeof Revwalk;
+    Merge: typeof Merge;
+    Graph: typeof Graph;
+    Remote: typeof Remote;
+    Branch: typeof Branch;
+    Signature: typeof Signature;
   };
 
   export = _default;
