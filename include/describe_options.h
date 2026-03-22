@@ -1,0 +1,69 @@
+// This is a generated file, modify: generate/templates/templates/struct_header.h
+
+// generated from struct_header.h
+#ifndef GITDESCRIBEOPTIONS_H
+#define GITDESCRIBEOPTIONS_H
+#include <napi.h>
+#include <string>
+#include <utility>
+
+#include "async_baton.h"
+#include "async_worker.h"
+#include "callback_wrapper.h"
+#include "context.h"
+#include "reference_counter.h"
+#include "bungit_wrapper.h"
+#include "configurable_class_wrapper.h"
+#include "v8_helpers.h"
+
+extern "C" {
+  #include <git2.h>
+  #include <git2/sys/errors.h>
+ }
+
+ class GitDescribeOptions;
+class ConfigurableGitDescribeOptions;
+ 
+struct GitDescribeOptionsTraits {
+  typedef GitDescribeOptions cppClass;
+  typedef git_describe_options cType;
+  typedef ConfigurableGitDescribeOptions configurableCppClass;
+ 
+  static const bool isDuplicable = false;
+  static void duplicate(git_describe_options **dest, git_describe_options *src) {
+     throw std::runtime_error("duplicate called on GitDescribeOptions which cannot be duplicated");
+   }
+
+  static std::string className() { return "GitDescribeOptions"; };
+  static const bool isSingleton = false;
+  static const bool isFreeable = true;
+  static void free(git_describe_options *raw) {
+    unsigned long referenceCount = 0;
+     if (referenceCount == 0) {
+      ::free(raw); // :: to avoid calling this free recursively
+    }
+   }
+};
+  
+class ConfigurableGitDescribeOptions : public nodegit::ConfigurableClassWrapper<GitDescribeOptionsTraits> {
+  friend class nodegit::ConfigurableClassWrapper<GitDescribeOptionsTraits>;
+
+public:
+  static v8ConversionResult fromJavascript(nodegit::Context *nodegitContext, Napi::Value input);
+  ~ConfigurableGitDescribeOptions();
+
+  ConfigurableGitDescribeOptions(const ConfigurableGitDescribeOptions &) = delete;
+  ConfigurableGitDescribeOptions(ConfigurableGitDescribeOptions &&) = delete;
+  ConfigurableGitDescribeOptions &operator=(const ConfigurableGitDescribeOptions &) = delete;
+  ConfigurableGitDescribeOptions &operator=(ConfigurableGitDescribeOptions &&) = delete;
+
+             
+private:
+  ConfigurableGitDescribeOptions(nodegit::Context *nodegitContext);
+  ConfigurableGitDescribeOptions() = delete;
+  Napi::Reference<Napi::Value> promiseError;
+
+                   
+};
+
+#endif
