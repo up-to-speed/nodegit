@@ -58,17 +58,17 @@ jobs:
           node utils/retry npm test
 
       - name: Package prebuild
-        if: always() && steps.install.outcome == 'success' && startsWith(github.ref, 'refs/tags/v')
+        if: always() && steps.install.outcome == 'success' && startsWith(github.ref, 'refs/tags/v') && matrix.node == 22
         run: |
           npm install -g @mapbox/node-pre-gyp
           node lifecycleScripts/clean
           node-pre-gyp package
 
       - name: Upload prebuild artifact
-        if: always() && steps.install.outcome == 'success' && startsWith(github.ref, 'refs/tags/v')
+        if: always() && steps.install.outcome == 'success' && startsWith(github.ref, 'refs/tags/v') && matrix.node == 22
         uses: actions/upload-artifact@v4
         with:
-          name: prebuild-linux-x64-node${{ matrix.node }}
+          name: prebuild-linux-x64
           path: build/stage/**/*.tar.gz
 
   macos-tests:
@@ -111,17 +111,17 @@ jobs:
           node utils/retry npm test
 
       - name: Package prebuild
-        if: always() && steps.install.outcome == 'success' && startsWith(github.ref, 'refs/tags/v')
+        if: always() && steps.install.outcome == 'success' && startsWith(github.ref, 'refs/tags/v') && matrix.node == 22
         run: |
           npm install -g @mapbox/node-pre-gyp
           node lifecycleScripts/clean
           node-pre-gyp package
 
       - name: Upload prebuild artifact
-        if: always() && steps.install.outcome == 'success' && startsWith(github.ref, 'refs/tags/v')
+        if: always() && steps.install.outcome == 'success' && startsWith(github.ref, 'refs/tags/v') && matrix.node == 22
         uses: actions/upload-artifact@v4
         with:
-          name: prebuild-macos-${{ matrix.arch }}-node${{ matrix.node }}
+          name: prebuild-macos-${{ matrix.arch }}
           path: build/stage/**/*.tar.gz
 
   windows-tests:
@@ -169,17 +169,17 @@ jobs:
           node utils/retry npm test
 
       - name: Package prebuild
-        if: always() && steps.install.outcome == 'success' && startsWith(github.ref, 'refs/tags/v')
+        if: always() && steps.install.outcome == 'success' && startsWith(github.ref, 'refs/tags/v') && matrix.node == 22
         run: |
           npm install -g @mapbox/node-pre-gyp
           node lifecycleScripts\clean
           node-pre-gyp package --target_arch=${{ matrix.arch }}
 
       - name: Upload prebuild artifact
-        if: always() && steps.install.outcome == 'success' && startsWith(github.ref, 'refs/tags/v')
+        if: always() && steps.install.outcome == 'success' && startsWith(github.ref, 'refs/tags/v') && matrix.node == 22
         uses: actions/upload-artifact@v4
         with:
-          name: prebuild-windows-${{ matrix.arch }}-node${{ matrix.node }}
+          name: prebuild-windows-${{ matrix.arch }}
           path: build/stage/**/*.tar.gz
 
   publish-release:
