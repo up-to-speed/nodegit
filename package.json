@@ -80,6 +80,7 @@
     "mocha": "mocha --expose-gc test/runner test/tests --timeout 150000 --exit",
     "mochaDebug": "mocha --expose-gc --inspect-brk test/runner test/tests --timeout 150000",
     "postinstall": "node lifecycleScripts/postinstall",
+    "prepack": "node generate",
     "rebuild": "node generate && node-gyp configure build",
     "rebuildDebug": "node generate && node-gyp configure --debug build",
     "recompile": "node-gyp configure build",
