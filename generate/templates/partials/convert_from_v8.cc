@@ -36,15 +36,22 @@
   from_{{ name }} = GitBufConverter::Convert(info[{{ jsArg }}]);
   {%elsif cppClassName == 'Wrapper'%}
 
-  std::string {{ name }} = info[{{ jsArg }}].As<Napi::String>().Utf8Value();
-  // malloc with one extra byte so we can add the terminating null character C-strings expect:
-  from_{{ name }} = ({{ cType }}) malloc({{ name }}.length() + 1);
-  // copy the characters from the nodejs string into our C-string (used instead of strdup or strcpy because nulls in
-  // the middle of strings are valid coming from nodejs):
-  memcpy((void *)from_{{ name }}, {{ name }}.c_str(), {{ name }}.length());
-  // ensure the final byte of our new string is null, extra casts added to ensure compatibility with various C types
-  // used in the nodejs binding generation:
-  memset((void *)(((char *)from_{{ name }}) + {{ name }}.length()), 0, 1);
+  if (info[{{ jsArg }}].IsBuffer()) {
+    Napi::Buffer<char> {{ name }}_buf = info[{{ jsArg }}].As<Napi::Buffer<char>>();
+    size_t {{ name }}_len = {{ name }}_buf.Length();
+    from_{{ name }} = ({{ cType }}) malloc({{ name }}_len);
+    memcpy((void *)from_{{ name }}, {{ name }}_buf.Data(), {{ name }}_len);
+  } else {
+    std::string {{ name }} = info[{{ jsArg }}].As<Napi::String>().Utf8Value();
+    // malloc with one extra byte so we can add the terminating null character C-strings expect:
+    from_{{ name }} = ({{ cType }}) malloc({{ name }}.length() + 1);
+    // copy the characters from the nodejs string into our C-string (used instead of strdup or strcpy because nulls in
+    // the middle of strings are valid coming from nodejs):
+    memcpy((void *)from_{{ name }}, {{ name }}.c_str(), {{ name }}.length());
+    // ensure the final byte of our new string is null, extra casts added to ensure compatibility with various C types
+    // used in the nodejs binding generation:
+    memset((void *)(((char *)from_{{ name }}) + {{ name }}.length()), 0, 1);
+  }
   {%elsif cppClassName == 'Array'%}
 
   Napi::Array tmp_{{ name }} = info[{{ jsArg }}].As<Napi::Array>();

@@ -58,4 +58,20 @@ describe("Odb", function() {
         assert.equal(object.size(), obj.length);
       });
   });
+
+  it("can write a Buffer to git", function() {
+    var buf = Buffer.from("test data");
+    var odb = this.odb;
+
+    return odb.write(buf, buf.length, Obj.TYPE.BLOB)
+      .then(function(oid) {
+        assert.ok(oid instanceof Oid);
+
+        return odb.read(oid);
+      })
+      .then(function(object) {
+        assert.equal(object.type(), Obj.TYPE.BLOB);
+        assert.equal(object.size(), buf.length);
+      });
+  });
 });

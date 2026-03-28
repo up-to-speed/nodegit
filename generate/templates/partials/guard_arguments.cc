@@ -19,6 +19,12 @@
     Napi::Error::New(env, "Array, String Object, or string {{arg.name}} is required.").ThrowAsJavaScriptException();
     return env.Undefined();
   }
+        {%elsif arg.cppClassName == "Wrapper" %}
+  if (info.Length() == {{arg.jsArg}} || (!info[{{arg.jsArg}}].IsString() && !info[{{arg.jsArg}}].IsBuffer())) {
+    Napi::Error::New(env, "String or Buffer {{arg.name}} is required.").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+
         {%else%}
   if (info.Length() == {{arg.jsArg}} || !info[{{arg.jsArg}}].Is{{arg.cppClassName|cppToV8}}()) {
     Napi::Error::New(env, "{{arg.jsClassName}} {{arg.name}} is required.").ThrowAsJavaScriptException();

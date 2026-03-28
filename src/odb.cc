@@ -512,8 +512,8 @@ void GitOdb::ExistsPrefixWorker::HandleOKCallback() {
 Napi::Value GitOdb::Hash(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
-  if (info.Length() == 0 || !info[0].IsString()) {
-    Napi::Error::New(env, "Buffer data is required.").ThrowAsJavaScriptException();
+  if (info.Length() == 0 || (!info[0].IsString() && !info[0].IsBuffer())) {
+    Napi::Error::New(env, "String or Buffer data is required.").ThrowAsJavaScriptException();
     return env.Undefined();
   }
 
@@ -545,15 +545,22 @@ Napi::Value GitOdb::Hash(const Napi::CallbackInfo& info) {
 // start convert_from_v8 block
   const void * from_data = NULL;
 
-  std::string data = info[0].As<Napi::String>().Utf8Value();
-  // malloc with one extra byte so we can add the terminating null character C-strings expect:
-  from_data = (const void *) malloc(data.length() + 1);
-  // copy the characters from the nodejs string into our C-string (used instead of strdup or strcpy because nulls in
-  // the middle of strings are valid coming from nodejs):
-  memcpy((void *)from_data, data.c_str(), data.length());
-  // ensure the final byte of our new string is null, extra casts added to ensure compatibility with various C types
-  // used in the nodejs binding generation:
-  memset((void *)(((char *)from_data) + data.length()), 0, 1);
+  if (info[0].IsBuffer()) {
+    Napi::Buffer<char> data_buf = info[0].As<Napi::Buffer<char>>();
+    size_t data_len = data_buf.Length();
+    from_data = (const void *) malloc(data_len);
+    memcpy((void *)from_data, data_buf.Data(), data_len);
+  } else {
+    std::string data = info[0].As<Napi::String>().Utf8Value();
+    // malloc with one extra byte so we can add the terminating null character C-strings expect:
+    from_data = (const void *) malloc(data.length() + 1);
+    // copy the characters from the nodejs string into our C-string (used instead of strdup or strcpy because nulls in
+    // the middle of strings are valid coming from nodejs):
+    memcpy((void *)from_data, data.c_str(), data.length());
+    // ensure the final byte of our new string is null, extra casts added to ensure compatibility with various C types
+    // used in the nodejs binding generation:
+    memset((void *)(((char *)from_data) + data.length()), 0, 1);
+  }
 // end convert_from_v8 block
           baton->data = from_data;
 // start convert_from_v8 block
@@ -1417,8 +1424,8 @@ from_cgraph = Napi::ObjectWrap<GitCommitGraph>::Unwrap(info[0].As<Napi::Object>(
 Napi::Value GitOdb::Write(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
-  if (info.Length() == 0 || !info[0].IsString()) {
-    Napi::Error::New(env, "Buffer data is required.").ThrowAsJavaScriptException();
+  if (info.Length() == 0 || (!info[0].IsString() && !info[0].IsBuffer())) {
+    Napi::Error::New(env, "String or Buffer data is required.").ThrowAsJavaScriptException();
     return env.Undefined();
   }
 
@@ -1451,15 +1458,22 @@ Napi::Value GitOdb::Write(const Napi::CallbackInfo& info) {
 // start convert_from_v8 block
   const void * from_data = NULL;
 
-  std::string data = info[0].As<Napi::String>().Utf8Value();
-  // malloc with one extra byte so we can add the terminating null character C-strings expect:
-  from_data = (const void *) malloc(data.length() + 1);
-  // copy the characters from the nodejs string into our C-string (used instead of strdup or strcpy because nulls in
-  // the middle of strings are valid coming from nodejs):
-  memcpy((void *)from_data, data.c_str(), data.length());
-  // ensure the final byte of our new string is null, extra casts added to ensure compatibility with various C types
-  // used in the nodejs binding generation:
-  memset((void *)(((char *)from_data) + data.length()), 0, 1);
+  if (info[0].IsBuffer()) {
+    Napi::Buffer<char> data_buf = info[0].As<Napi::Buffer<char>>();
+    size_t data_len = data_buf.Length();
+    from_data = (const void *) malloc(data_len);
+    memcpy((void *)from_data, data_buf.Data(), data_len);
+  } else {
+    std::string data = info[0].As<Napi::String>().Utf8Value();
+    // malloc with one extra byte so we can add the terminating null character C-strings expect:
+    from_data = (const void *) malloc(data.length() + 1);
+    // copy the characters from the nodejs string into our C-string (used instead of strdup or strcpy because nulls in
+    // the middle of strings are valid coming from nodejs):
+    memcpy((void *)from_data, data.c_str(), data.length());
+    // ensure the final byte of our new string is null, extra casts added to ensure compatibility with various C types
+    // used in the nodejs binding generation:
+    memset((void *)(((char *)from_data) + data.length()), 0, 1);
+  }
 // end convert_from_v8 block
           baton->data = from_data;
 // start convert_from_v8 block
