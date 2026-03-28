@@ -349,6 +349,11 @@
               "<(electron_openssl_root)/include"
             ],
           }],
+          ["<(is_electron) != 1", {
+            "libraries": [
+              "<!@(pkg-config --libs openssl 2>/dev/null || echo '-lcrypto -lssl')"
+            ]
+          }],
         ],
       }],
       [
