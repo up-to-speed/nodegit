@@ -289,7 +289,7 @@ void GitConfig::FindGlobalWorker::HandleOKCallback() {
     Napi::Value v8ConversionSlot;
 // start convert_to_v8 block
    if (baton->out) {
-    v8ConversionSlot = Napi::String::New(env, baton->out->ptr, baton->out->size);
+    v8ConversionSlot = Napi::Buffer<char>::Copy(env, baton->out->ptr, baton->out->size);
   }
   else {
     v8ConversionSlot = env.Null();
@@ -441,7 +441,7 @@ void GitConfig::FindProgramdataWorker::HandleOKCallback() {
     Napi::Value v8ConversionSlot;
 // start convert_to_v8 block
    if (baton->out) {
-    v8ConversionSlot = Napi::String::New(env, baton->out->ptr, baton->out->size);
+    v8ConversionSlot = Napi::Buffer<char>::Copy(env, baton->out->ptr, baton->out->size);
   }
   else {
     v8ConversionSlot = env.Null();
@@ -593,7 +593,7 @@ void GitConfig::FindSystemWorker::HandleOKCallback() {
     Napi::Value v8ConversionSlot;
 // start convert_to_v8 block
    if (baton->out) {
-    v8ConversionSlot = Napi::String::New(env, baton->out->ptr, baton->out->size);
+    v8ConversionSlot = Napi::Buffer<char>::Copy(env, baton->out->ptr, baton->out->size);
   }
   else {
     v8ConversionSlot = env.Null();
@@ -745,7 +745,7 @@ void GitConfig::FindXdgWorker::HandleOKCallback() {
     Napi::Value v8ConversionSlot;
 // start convert_to_v8 block
    if (baton->out) {
-    v8ConversionSlot = Napi::String::New(env, baton->out->ptr, baton->out->size);
+    v8ConversionSlot = Napi::Buffer<char>::Copy(env, baton->out->ptr, baton->out->size);
   }
   else {
     v8ConversionSlot = env.Null();
@@ -1596,7 +1596,7 @@ void GitConfig::GetPathWorker::HandleOKCallback() {
     Napi::Value v8ConversionSlot;
 // start convert_to_v8 block
    if (baton->out) {
-    v8ConversionSlot = Napi::String::New(env, baton->out->ptr, baton->out->size);
+    v8ConversionSlot = Napi::Buffer<char>::Copy(env, baton->out->ptr, baton->out->size);
   }
   else {
     v8ConversionSlot = env.Null();
@@ -1773,7 +1773,7 @@ void GitConfig::GetStringBufWorker::HandleOKCallback() {
     Napi::Value v8ConversionSlot;
 // start convert_to_v8 block
    if (baton->out) {
-    v8ConversionSlot = Napi::String::New(env, baton->out->ptr, baton->out->size);
+    v8ConversionSlot = Napi::Buffer<char>::Copy(env, baton->out->ptr, baton->out->size);
   }
   else {
     v8ConversionSlot = env.Null();

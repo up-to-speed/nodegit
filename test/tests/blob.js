@@ -316,9 +316,9 @@ describe("Blob", function() {
           );
         })
         .then(function(content) {
-          var ending = content.match(lineEndingRegex);
+          var ending = content.toString().match(lineEndingRegex);
           assert.strictEqual(ending[0], "\r\n");
-          assert.notStrictEqual(content, test.blob.toString());
+          assert.notStrictEqual(content.toString(), test.blob.toString());
         });
     });
 
@@ -360,9 +360,9 @@ describe("Blob", function() {
           );
         })
         .then(function(content) {
-          var ending = content.match(lineEndingRegex);
+          var ending = content.toString().match(lineEndingRegex);
           assert.strictEqual(ending[0], "\r\n");
-          assert.notStrictEqual(content, test.blob.toString());
+          assert.notStrictEqual(content.toString(), test.blob.toString());
         });
     });
 
@@ -404,7 +404,7 @@ describe("Blob", function() {
           );
         })
         .then(function(content) {
-          assert.strictEqual(content, "");
+          assert.strictEqual(content.length, 0);
         });
     });
 
@@ -446,7 +446,8 @@ describe("Blob", function() {
           );
         })
         .then(function(content) {
-          assert.strictEqual(content, binary.toString());
+          assert.ok(Buffer.isBuffer(content));
+          assert.ok(content.equals(binary));
         });
     });
 
@@ -520,9 +521,9 @@ describe("Blob", function() {
           return test.lfBlob.filter(newFileName, { flags: 0 });
         })
         .then(function(content) {
-          var ending = content.match(lineEndingRegex);
+          var ending = content.toString().match(lineEndingRegex);
           assert.strictEqual(ending[0], "\r\n");
-          assert.notStrictEqual(content, test.blob.toString());
+          assert.notStrictEqual(content.toString(), test.blob.toString());
         });
     });
 
@@ -563,9 +564,9 @@ describe("Blob", function() {
           );
         })
         .then(function(content) {
-          var ending = content.match(lineEndingRegex);
+          var ending = content.toString().match(lineEndingRegex);
           assert.strictEqual(ending[0], "\r\n");
-          assert.notStrictEqual(content, test.blob.toString());
+          assert.notStrictEqual(content.toString(), test.blob.toString());
         });
     });
 
@@ -606,7 +607,7 @@ describe("Blob", function() {
           );
         })
         .then(function(content) {
-          assert.strictEqual(content, "");
+          assert.strictEqual(content.length, 0);
         });
     });
 
@@ -647,7 +648,8 @@ describe("Blob", function() {
           );
         })
         .then(function(content) {
-          assert.strictEqual(content, binary.toString());
+          assert.ok(Buffer.isBuffer(content));
+          assert.ok(content.equals(binary));
         });
     });
 

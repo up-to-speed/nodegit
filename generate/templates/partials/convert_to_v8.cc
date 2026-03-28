@@ -74,7 +74,7 @@
   v8ConversionSlot = env.Null();
   {% else %}
   if ({{= parsedName =}}) {
-    v8ConversionSlot = Napi::String::New(env, {{= parsedName =}}->ptr, {{= parsedName = }}->size);
+    v8ConversionSlot = Napi::Buffer<char>::Copy(env, {{= parsedName =}}->ptr, {{= parsedName = }}->size);
   }
   else {
     v8ConversionSlot = env.Null();
