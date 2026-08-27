@@ -7,6 +7,11 @@ on:
       - v*.*.*
   pull_request:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing version tag to rebuild and republish; omit to run tests only
+        required: false
+        type: string
 
 name: Testing
 
@@ -16,13 +21,16 @@ jobs:
     strategy:
       matrix:
         node: [20, 22, 24]
+        arch: [x64, arm64]
       fail-fast: false
-    runs-on: ubuntu-22.04
+    runs-on: ${{ matrix.arch == 'x64' && 'ubuntu-22.04' || 'ubuntu-22.04-arm' }}
     steps:
       - name: Install Dependencies for Ubuntu
         run: sudo apt-get update && sudo apt-get install -y software-properties-common git build-essential clang libssl-dev libkrb5-dev libc++-dev wget zlib1g-dev
 
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_tag || github.ref }}
 
       - name: Setup Environment
         run: |
@@ -53,22 +61,22 @@ jobs:
       - name: Test
         run: |
           set -e
-          eval `ssh-agent -s`
+          eval "$(ssh-agent -s)"
           ssh-add ~/.ssh_tests/id_rsa
           node utils/retry npm test
 
       - name: Package prebuild
-        if: always() && steps.install.outcome == 'success' && startsWith(github.ref, 'refs/tags/v') && matrix.node == 22
+        if: always() && steps.install.outcome == 'success' && (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '') && matrix.node == 22
         run: |
           npm install -g @mapbox/node-pre-gyp
           node lifecycleScripts/clean
-          node-pre-gyp package
+          node-pre-gyp package --target_arch=${{ matrix.arch }}
 
       - name: Upload prebuild artifact
-        if: always() && steps.install.outcome == 'success' && startsWith(github.ref, 'refs/tags/v') && matrix.node == 22
+        if: always() && steps.install.outcome == 'success' && (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '') && matrix.node == 22
         uses: actions/upload-artifact@v4
         with:
-          name: prebuild-linux-x64
+          name: prebuild-linux-${{ matrix.arch }}
           path: build/stage/**/*.tar.gz
 
   macos-tests:
@@ -81,6 +89,8 @@ jobs:
     runs-on: ${{ matrix.arch == 'x64' && 'macos-13' || 'macos-14' }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_tag || github.ref }}
 
       - name: Setup Environment
         run: |
@@ -106,19 +116,19 @@ jobs:
       - name: Test
         run: |
           set -e
-          eval `ssh-agent -s`
+          eval "$(ssh-agent -s)"
           ssh-add ~/.ssh_tests/id_rsa
           node utils/retry npm test
 
       - name: Package prebuild
-        if: always() && steps.install.outcome == 'success' && startsWith(github.ref, 'refs/tags/v') && matrix.node == 22
+        if: always() && steps.install.outcome == 'success' && (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '') && matrix.node == 22
         run: |
           npm install -g @mapbox/node-pre-gyp
           node lifecycleScripts/clean
           node-pre-gyp package
 
       - name: Upload prebuild artifact
-        if: always() && steps.install.outcome == 'success' && startsWith(github.ref, 'refs/tags/v') && matrix.node == 22
+        if: always() && steps.install.outcome == 'success' && (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '') && matrix.node == 22
         uses: actions/upload-artifact@v4
         with:
           name: prebuild-macos-${{ matrix.arch }}
@@ -142,6 +152,8 @@ jobs:
           git config --global user.email johndoe@example.com
 
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_tag || github.ref }}
 
       - name: Use Node.js
         uses: actions/setup-node@v4
@@ -169,14 +181,14 @@ jobs:
           node utils/retry npm test
 
       - name: Package prebuild
-        if: always() && steps.install.outcome == 'success' && startsWith(github.ref, 'refs/tags/v') && matrix.node == 22
+        if: always() && steps.install.outcome == 'success' && (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '') && matrix.node == 22
         run: |
           npm install -g @mapbox/node-pre-gyp
           node lifecycleScripts\clean
           node-pre-gyp package --target_arch=${{ matrix.arch }}
 
       - name: Upload prebuild artifact
-        if: always() && steps.install.outcome == 'success' && startsWith(github.ref, 'refs/tags/v') && matrix.node == 22
+        if: always() && steps.install.outcome == 'success' && (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '') && matrix.node == 22
         uses: actions/upload-artifact@v4
         with:
           name: prebuild-windows-${{ matrix.arch }}
@@ -184,7 +196,7 @@ jobs:
 
   publish-release:
     name: Publish GitHub Release
-    if: always() && startsWith(github.ref, 'refs/tags/v')
+    if: always() && (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '')
     needs: [linux-tests, macos-tests, windows-tests]
     runs-on: ubuntu-latest
     permissions:
@@ -200,8 +212,46 @@ jobs:
       - name: List prebuilds
         run: find prebuilds -type f
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: prebuilds/**/*.tar.gz
-          generate_release_notes: true
+      - name: Verify required prebuilds
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          for asset in \
+            "bungit-v${version}-linux-x64.tar.gz" \
+            "bungit-v${version}-linux-arm64.tar.gz" \
+            "bungit-v${version}-darwin-x64.tar.gz" \
+            "bungit-v${version}-darwin-arm64.tar.gz" \
+            "bungit-v${version}-win32-x64.tar.gz" \
+            "bungit-v${version}-win32-arm64.tar.gz"
+          do
+            if ! find prebuilds -type f -name "$asset" -print -quit | grep -q .; then
+              echo "Missing required prebuild: $asset" >&2
+              exit 1
+            fi
+          done
+
+      - name: Create or update GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          mapfile -d '' assets < <(find prebuilds -type f -name '*.tar.gz' -print0)
+          if (( ${#assets[@]} == 0 )); then
+            echo "No prebuilds were downloaded" >&2
+            exit 1
+          fi
+
+          if ! gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --verify-tag \
+              --generate-notes
+          fi
+          gh release upload "$RELEASE_TAG" "${assets[@]}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber
