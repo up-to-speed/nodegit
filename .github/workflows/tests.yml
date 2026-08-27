@@ -67,14 +67,18 @@ jobs:
           node utils/retry npm test
 
       - name: Package prebuild
+        id: package
         if: always() && steps.install.outcome == 'success' && (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '') && matrix.node == 22
         run: |
           npm install -g @mapbox/node-pre-gyp
           node lifecycleScripts/clean
+          mkdir -p build/prebuild/Release
+          cp build/Release/bungit.node build/prebuild/Release/
+          npm pkg set binary.module_path=./build/prebuild/Release/
           node-pre-gyp package --target_arch=${{ matrix.arch }}
 
       - name: Upload prebuild artifact
-        if: always() && steps.install.outcome == 'success' && (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '') && matrix.node == 22
+        if: always() && steps.package.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: prebuild-linux-${{ matrix.arch }}
@@ -123,14 +127,18 @@ jobs:
           node utils/retry npm test
 
       - name: Package prebuild
+        id: package
         if: always() && steps.install.outcome == 'success' && (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '') && matrix.node == 22
         run: |
           npm install -g @mapbox/node-pre-gyp
           node lifecycleScripts/clean
-          node-pre-gyp package
+          mkdir -p build/prebuild/Release
+          cp build/Release/bungit.node build/prebuild/Release/
+          npm pkg set binary.module_path=./build/prebuild/Release/
+          node-pre-gyp package --target_arch=${{ matrix.arch }}
 
       - name: Upload prebuild artifact
-        if: always() && steps.install.outcome == 'success' && (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '') && matrix.node == 22
+        if: always() && steps.package.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: prebuild-macos-${{ matrix.arch }}
@@ -183,14 +191,21 @@ jobs:
           node utils/retry npm test
 
       - name: Package prebuild
+        id: package
         if: always() && steps.install.outcome == 'success' && (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '') && matrix.node == 22
         run: |
           npm install -g @mapbox/node-pre-gyp
           node lifecycleScripts\clean
+          New-Item -ItemType Directory -Force build\prebuild\Release
+          Copy-Item build\Release\bungit.node build\prebuild\Release\
+          if (Test-Path build\Release\bungit.pdb) {
+            Copy-Item build\Release\bungit.pdb build\prebuild\Release\
+          }
+          npm pkg set binary.module_path=./build/prebuild/Release/
           node-pre-gyp package --target_arch=${{ matrix.arch }}
 
       - name: Upload prebuild artifact
-        if: always() && steps.install.outcome == 'success' && (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '') && matrix.node == 22
+        if: always() && steps.package.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: prebuild-windows-${{ matrix.arch }}
