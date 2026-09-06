@@ -7,13 +7,12 @@ rem %3 - OpenSSL Configure target
 
 perl .\Configure %3 no-shared no-ssl2 no-ssl3 no-comp --prefix="%cd%\.." --openssldir="%cd%\.." || goto :error
 
-nmake || goto :error
+rem We link libcrypto/libssl and nothing else, so build and install just those:
+rem the apps, docs and test suite are the slowest part of a Windows build, and
+rem every build_libs run happens on a Windows machine waiting on a prebuild.
+nmake build_libs || goto :error
 
-if "%NODEGIT_SKIP_TESTS%" NEQ "1" (
-  nmake test || goto :error
-)
-
-nmake install || goto :error
+nmake install_dev || goto :error
 
 goto :EOF
 

@@ -14,13 +14,12 @@ import { hostArch, targetArch } from "./buildFlags.js";
 
 const pipeline = promisify(stream.pipeline);
 
-import packageJson from '../package.json' with { type: "json" };
-
 const OPENSSL_VERSION = "3.0.18";
 const win32BatPath = path.join(import.meta.dirname, "build-openssl.bat");
 const vendorPath = path.resolve(import.meta.dirname, "..", "vendor");
 const opensslPatchPath = path.join(vendorPath, "patches", "openssl");
 const extractPath = path.join(vendorPath, "openssl");
+const versionStampPath = path.join(extractPath, ".openssl-version");
 
 const exists = (filePath) => fs.stat(filePath).then(() => true).catch(() => false);
 
@@ -246,10 +245,7 @@ const buildWin32 = async (buildCwd) => {
     const buildProcess = spawn(`"${win32BatPath}" "${vcvarsallPath}" ${vsBuildArch} ${vcTarget}`, {
       cwd: buildCwd,
       shell: process.platform === "win32",
-      env: {
-        ...process.env,
-        NODEGIT_SKIP_TESTS: targetArch !== hostArch ? "1" : undefined
-      }
+      env: process.env
     });
 
     buildProcess.stdout.on("data", function(data) {
@@ -272,33 +268,32 @@ const buildWin32 = async (buildCwd) => {
   
 };
 
-const removeOpenSSLIfOudated = async (openSSLVersion) => {
-  try {
-    let openSSLResult;
-    try {
-      const openSSLPath = path.join(extractPath, "bin", "openssl");
-      openSSLResult = await execPromise(`${openSSLPath} version`);
-    } catch {
-      /* if we fail to get the version, assume removal not required */
-    }
-
-    if (!openSSLResult) {
-      return;
-    }
-
-    const versionMatch = openSSLResult.match(/^OpenSSL (\d\.\d\.\d[a-z]*)/);
-    const installedVersion = versionMatch && versionMatch[1];
-    if (!installedVersion || installedVersion === openSSLVersion) {
-      return;
-    }
-
-    console.log("Removing outdated OpenSSL at: ", extractPath);
-    await fs.rm(extractPath, { recursive: true, force: true });
-    console.log("Outdated OpenSSL removed.");
-  } catch (err) {
-    console.log("Remove outdated OpenSSL failed: ", err);
+/**
+ * Whether vendor/openssl already holds this exact OpenSSL, ready to link.
+ *
+ * The stamp is written only once a build or download has finished, so a
+ * directory left behind by an interrupted one -- or by an older OpenSSL, or by
+ * a CI cache -- is thrown away and reacquired instead of being linked blind.
+ */
+const hasUsableOpenSSL = async (openSSLVersion) => {
+  if (!await exists(extractPath)) {
+    return false;
   }
+
+  const stamped = await fs.readFile(versionStampPath, "utf8")
+    .then((contents) => contents.trim())
+    .catch(() => null);
+  if (stamped === openSSLVersion) {
+    return true;
+  }
+
+  console.log(`Removing OpenSSL at ${extractPath}: found ${stamped ?? "an unfinished acquire"}, want ${openSSLVersion}`);
+  await fs.rm(extractPath, { recursive: true, force: true });
+  return false;
 };
+
+const markOpenSSLAcquired = (openSSLVersion) =>
+  fs.writeFile(versionStampPath, `${openSSLVersion}\n`);
 
 const makeOnStreamDownloadProgress = () => {
   let lastReport = performance.now();
@@ -320,13 +315,10 @@ const buildOpenSSLIfNecessary = async ({
     return;
   }
 
-  await removeOpenSSLIfOudated(openSSLVersion);
-
-  try {
-    await fs.stat(extractPath);
-    console.log("Skipping OpenSSL build, dir exists");
+  if (await hasUsableOpenSSL(openSSLVersion)) {
+    console.log(`Skipping OpenSSL build, ${openSSLVersion} already built`);
     return;
-  } catch {}
+  }
 
   const openSSLUrl = getOpenSSLSourceUrl(openSSLVersion);
   const openSSLSha256Url = getOpenSSLSourceSha256Url(openSSLVersion);
@@ -357,11 +349,13 @@ const buildOpenSSLIfNecessary = async ({
     throw new Error(`Unknown platform: ${process.platform}`);
   }
 
+  await markOpenSSLAcquired(openSSLVersion);
   console.log("Build finished.");
 }
 
 const downloadOpenSSLIfNecessary = async ({
   downloadBinUrl,
+  openSSLVersion,
   maybeDownloadSha256,
   maybeDownloadSha256Url
 }) => {
@@ -370,12 +364,11 @@ const downloadOpenSSLIfNecessary = async ({
     return;
   }
 
-  try {
-    await fs.stat(extractPath);
-    console.log("Skipping OpenSSL download, dir exists");
+  if (await hasUsableOpenSSL(openSSLVersion)) {
+    console.log(`Skipping OpenSSL download, ${openSSLVersion} already present`);
     return;
-  } catch {}
-  
+  }
+
   if (maybeDownloadSha256Url) {
     maybeDownloadSha256 = (await got(maybeDownloadSha256Url)).body.trim();
   }
@@ -395,6 +388,7 @@ const downloadOpenSSLIfNecessary = async ({
     ...pipelineSteps
   );
 
+  await markOpenSSLAcquired(openSSLVersion);
   console.log(`OpenSSL download + extract complete${maybeDownloadSha256 ? ": SHA256 OK." : "."}`);
   console.log("Download finished.");
 }
@@ -404,12 +398,6 @@ export const getOpenSSLPackageName = () => {
 }
 
 export const getOpenSSLPackagePath = () => path.join(import.meta.dirname, getOpenSSLPackageName());
-
-const getOpenSSLPackageUrl = () => {
-  const hostUrl = new URL(packageJson.binary.host);
-  hostUrl.pathname = getOpenSSLPackageName();
-  return hostUrl.toString();
-};
 
 const buildPackage = async () => {
   let resolve, reject;
@@ -438,17 +426,22 @@ const buildPackage = async () => {
   await fs.writeFile(`${getOpenSSLPackagePath()}.sha256`, digest);
 };
 
+/**
+ * OpenSSL is built from source unless npm_config_openssl_bin_url names a
+ * package to download. There is no default download URL: we publish addon
+ * prebuilds, not OpenSSL packages, so the only builds that reach this script
+ * are the ones producing those prebuilds and installs building from source.
+ */
 const acquireOpenSSL = async () => {
   try {
-    const downloadBinUrl = process.env.npm_config_openssl_bin_url
-      || (['win32', 'darwin'].includes(process.platform) ? getOpenSSLPackageUrl() : undefined);
-    if (downloadBinUrl && downloadBinUrl !== 'skip' && !process.env.NODEGIT_OPENSSL_BUILD_PACKAGE) {
-      const downloadOptions = { downloadBinUrl };
+    const downloadBinUrl = process.env.npm_config_openssl_bin_url;
+    if (downloadBinUrl && !process.env.NODEGIT_OPENSSL_BUILD_PACKAGE) {
+      const downloadOptions = { downloadBinUrl, openSSLVersion: OPENSSL_VERSION };
       if (process.env.npm_config_openssl_bin_sha256 !== 'skip') {
         if (process.env.npm_config_openssl_bin_sha256) {
           downloadOptions.maybeDownloadSha256 = process.env.npm_config_openssl_bin_sha256;
         } else {
-          downloadOptions.maybeDownloadSha256Url = `${getOpenSSLPackageUrl()}.sha256`;
+          downloadOptions.maybeDownloadSha256Url = `${downloadBinUrl}.sha256`;
         }
       }
 

@@ -5,10 +5,10 @@
     "variables": {
       "target%": "none",
     },
-    "is_electron%": "<!(node ./utils/isBuildingForElectron.js <(node_root_dir))",
+    "uses_bundled_openssl%": "<!(node ./utils/usesBundledOpenSSL.js <(node_root_dir))",
     "is_IBMi%": "<!(node -p \"os.platform() == 'aix' && os.type() == 'OS400' ? 1 : 0\")",
-    "electron_openssl_root%": "<!(node ./utils/getElectronOpenSSLRoot.js <(module_root_dir))",
-    "electron_openssl_static%": "<!(node -p \"process.platform !== 'linux' || process.env.NODEGIT_OPENSSL_STATIC_LINK === '1' ? 1 : 0\")",
+    "bundled_openssl_root%": "<!(node ./utils/getBundledOpenSSLRoot.js <(module_root_dir))",
+    "bundled_openssl_static%": "<!(node -p \"process.platform !== 'linux' || process.env.NODEGIT_OPENSSL_STATIC_LINK === '1' ? 1 : 0\")",
     "cxx_version%": "<!(node ./utils/defaultCxxStandard.js <(target))",
     "has_cxxflags%": "<!(node -p \"process.env.CXXFLAGS ? 1 : 0\")",
     "macOS_deployment_target": "10.11",
@@ -243,16 +243,16 @@
             "-liconv",
           ],
           "conditions": [
-            ["<(is_electron) == 1", {
+            ["<(uses_bundled_openssl) == 1", {
               "include_dirs": [
-                "<(electron_openssl_root)/include"
+                "<(bundled_openssl_root)/include"
               ],
               "libraries": [
-                "<(electron_openssl_root)/lib/libssl.a",
-                "<(electron_openssl_root)/lib/libcrypto.a"
+                "<(bundled_openssl_root)/lib/libssl.a",
+                "<(bundled_openssl_root)/lib/libcrypto.a"
               ]
             }],
-            ["<(is_electron) != 1", {
+            ["<(uses_bundled_openssl) != 1", {
               "include_dirs": [
                 "<!(pkg-config --cflags-only-I openssl 2>/dev/null | sed 's/-I//g' || true)"
               ],
@@ -278,15 +278,7 @@
       ],
       [
         "OS=='win'", {
-          "conditions": [
-            ["<(is_electron) == 1", {
-              "include_dirs": ["<(electron_openssl_root)/include"],
-              "libraries": [
-                "<(electron_openssl_root)/lib/libcrypto.lib",
-                "<(electron_openssl_root)/lib/libssl.lib"
-              ]
-            }]
-          ],
+          "include_dirs": ["<(bundled_openssl_root)/include"],
           "defines": [
             "_HAS_EXCEPTIONS=1",
             "NOMINMAX=1",
@@ -300,6 +292,10 @@
               ]
             },
             "VCLinkerTool": {
+              "AdditionalDependencies": [
+                "<(bundled_openssl_root)/lib/libcrypto.lib",
+                "<(bundled_openssl_root)/lib/libssl.lib"
+              ],
               "AdditionalOptions": [
                 "/FORCE:MULTIPLE"
               ]
@@ -327,17 +323,17 @@
               "-std=c++<(cxx_version)"
             ],
           }],
-          ["<(is_electron) == 1", {
+          ["<(uses_bundled_openssl) == 1", {
             "conditions": [
-              ["<(electron_openssl_static) == 1", {
+              ["<(bundled_openssl_static) == 1", {
                 "libraries": [
-                  "<(electron_openssl_root)/lib/libssl.a",
-                  "<(electron_openssl_root)/lib/libcrypto.a"
+                  "<(bundled_openssl_root)/lib/libssl.a",
+                  "<(bundled_openssl_root)/lib/libcrypto.a"
                 ]
               }],
-              ["<(electron_openssl_static) != 1", {
+              ["<(bundled_openssl_static) != 1", {
                 "library_dirs": [
-                  "<(electron_openssl_root)/lib"
+                  "<(bundled_openssl_root)/lib"
                 ],
                 "libraries": [
                   "-lcrypto",
@@ -346,10 +342,10 @@
               }]
             ],
             "include_dirs": [
-              "<(electron_openssl_root)/include"
+              "<(bundled_openssl_root)/include"
             ],
           }],
-          ["<(is_electron) != 1", {
+          ["<(uses_bundled_openssl) != 1", {
             "libraries": [
               "<!@(pkg-config --libs openssl 2>/dev/null || echo '-lcrypto -lssl')"
             ]

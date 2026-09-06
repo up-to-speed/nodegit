@@ -26,6 +26,12 @@
 #### 3. Add references to binding.gyp template
     location: /generate/templates/templates/binding.gyp
 
+    Do not put # comments in this template. The render is passed through
+    js-beautify, which lexes it as JavaScript: a # comment is joined with the
+    line that follows it, swallowing whatever that line declared, and an
+    apostrophe inside one opens a string that never closes. Explain the
+    reasoning in the util the setting calls instead.
+
 #### 4. Add headers to bungit.cc template
     location: /generate/templates/templates/bungit.cc
 

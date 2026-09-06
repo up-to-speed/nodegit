@@ -1,6 +1,7 @@
 {
   "variables": {
-    "is_electron%": "<!(node ../utils/isBuildingForElectron.js <(node_root_dir))",
+    # See utils/usesBundledOpenSSL.js.
+    "uses_bundled_openssl%": "<!(node ../utils/usesBundledOpenSSL.js <(node_root_dir))",
     "macOS_deployment_target": "10.11"
   },
 
@@ -9,7 +10,7 @@
       "target_name": "acquireOpenSSL",
         "type": "none",
         "conditions": [
-        ["<(is_electron) == 1 and <!(node -p \"process.env.npm_config_openssl_dir ? 0 : 1\")", {
+        ["<(uses_bundled_openssl) == 1 and <!(node -p \"process.env.npm_config_openssl_dir ? 0 : 1\")", {
           "actions": [{
             "action_name": "acquire",
             "action": ["node", "../utils/acquireOpenSSL.mjs", "<(macOS_deployment_target)"],
