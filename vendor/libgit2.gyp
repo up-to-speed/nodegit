@@ -7,10 +7,11 @@
     "library%": "static_library",
     "openssl_enable_asm%": 0, # only supported with the Visual Studio 2012 (VC11) toolchain.
     "gcc_version%": 0,
-    "is_electron%": "<!(node ../utils/isBuildingForElectron.js <(node_root_dir))",
+    # See utils/usesBundledOpenSSL.js.
+    "uses_bundled_openssl%": "<!(node ../utils/usesBundledOpenSSL.js <(node_root_dir))",
     "is_clang%": 0,
     "is_IBMi%": "<!(node -p \"os.platform() == 'aix' && os.type() == 'OS400' ? 1 : 0\")",
-    "electron_openssl_root%": "<!(node ../utils/getElectronOpenSSLRoot.js <(module_root_dir))",
+    "bundled_openssl_root%": "<!(node ../utils/getBundledOpenSSLRoot.js <(module_root_dir))",
   },
   "targets": [
     {
@@ -237,12 +238,12 @@
         }],
         ["OS=='mac' or OS=='linux' or OS.endswith('bsd') or <(is_IBMi) == 1", {
           "conditions": [
-            ["<(is_electron) == 1", {
+            ["<(uses_bundled_openssl) == 1", {
               "dependencies": [
                 "./libssh2.gyp:acquireOpenSSL",
               ],
               "include_dirs": [
-                "<(electron_openssl_root)/include"
+                "<(bundled_openssl_root)/include"
               ]
             }]
           ],
@@ -296,12 +297,12 @@
             "GIT_IO_WSAPOLL"
           ],
           "conditions": [
-            ["<(is_electron) == 1", {
+            ["<(uses_bundled_openssl) == 1", {
               "dependencies": [
                 "./libssh2.gyp:acquireOpenSSL",
               ],
               "include_dirs": [
-                "<(electron_openssl_root)/include"
+                "<(bundled_openssl_root)/include"
               ]
             }]
           ],
@@ -486,33 +487,22 @@
       "conditions": [
         ["OS=='mac' or OS=='linux' or OS.endswith('bsd') or <(is_IBMi) == 1", {
           "conditions": [
-            ["<(is_electron) == 1", {
+            ["<(uses_bundled_openssl) == 1", {
               "include_dirs": [
-                "<(electron_openssl_root)/include"
+                "<(bundled_openssl_root)/include"
               ]
             }]
           ],
         }],
         ["OS=='win'", {
-          "conditions": [
-            ["<(is_electron) == 1", {
-              "include_dirs": [
-                "<(electron_openssl_root)/include"
-              ],
-              "libraries": [
-                "<(electron_openssl_root)/lib/libssl.lib",
-                "<(electron_openssl_root)/lib/libcrypto.lib"
-              ]
-            }, {
-              "defines": [
-                "OPENSSL_NO_RIPEMD",
-                "OPENSSL_NO_CAST"
-              ]
-            }]
-          ],
           "include_dirs": [
+            "<(bundled_openssl_root)/include",
             "libssh2/src",
             "libssh2/include"
+          ],
+          "libraries": [
+            "<(bundled_openssl_root)/lib/libssl.lib",
+            "<(bundled_openssl_root)/lib/libcrypto.lib"
           ],
           "defines!": [
             "HAVE_POLL"
@@ -545,8 +535,8 @@
       "conditions": [
         ["OS=='mac'", {
           "conditions": [
-            ["<(is_electron) == 1", {
-              "include_dirs": ["<(electron_openssl_root)/include"]
+            ["<(uses_bundled_openssl) == 1", {
+              "include_dirs": ["<(bundled_openssl_root)/include"]
             }]
           ],
           "sources": [
@@ -558,8 +548,8 @@
         }],
         ["OS=='linux'", {
           "conditions": [
-            ["<(is_electron) == 1", {
-              "include_dirs": ["<(electron_openssl_root)/include"]
+            ["<(uses_bundled_openssl) == 1", {
+              "include_dirs": ["<(bundled_openssl_root)/include"]
             }]
           ],
           "sources": [

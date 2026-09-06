@@ -68,7 +68,7 @@ jobs:
 
       - name: Package prebuild
         id: package
-        if: always() && steps.install.outcome == 'success' && (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '') && matrix.node == 22
+        if: always() && steps.install.outcome == 'success' && (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '' || github.event_name == 'workflow_dispatch') && matrix.node == 22
         run: |
           npm install -g @mapbox/node-pre-gyp
           node lifecycleScripts/clean
@@ -128,7 +128,7 @@ jobs:
 
       - name: Package prebuild
         id: package
-        if: always() && steps.install.outcome == 'success' && (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '') && matrix.node == 22
+        if: always() && steps.install.outcome == 'success' && (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '' || github.event_name == 'workflow_dispatch') && matrix.node == 22
         run: |
           npm install -g @mapbox/node-pre-gyp
           node lifecycleScripts/clean
@@ -171,11 +171,41 @@ jobs:
           node-version: ${{ matrix.node }}
           check-latest: true
 
+      # OpenSSL configures VC-WIN64A with assembly, which needs NASM. The
+      # runner image does not ship it.
+      - name: Install NASM
+        if: matrix.arch != 'arm64'
+        shell: pwsh
+        run: |
+          choco install nasm --no-progress -y
+          "C:\Program Files\NASM" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+
+      # Windows links the OpenSSL in vendor/openssl rather than node.exe's
+      # (utils/usesBundledOpenSSL.js). Building it is by far the slowest part
+      # of this job and depends only on the target arch and the build scripts;
+      # a restored cache that does not match is discarded by the version stamp
+      # acquireOpenSSL.mjs writes.
+      - name: Cache bundled OpenSSL
+        uses: actions/cache@v4
+        with:
+          path: vendor/openssl
+          key: openssl-windows-${{ matrix.arch }}-${{ hashFiles('utils/acquireOpenSSL.mjs', 'utils/build-openssl.bat') }}
+
       - name: Install
         id: install
         env:
           npm_config_arch: ${{ matrix.arch }}
         run: npm install
+
+      # The runtime this package exists for. Bun exports no OpenSSL, so an
+      # addon that borrowed node.exe's would fail to load here.
+      - name: Set up Bun
+        if: matrix.arch != 'arm64'
+        uses: oven-sh/setup-bun@v2
+
+      - name: Verify the addon loads in Bun
+        if: matrix.arch != 'arm64'
+        run: bun -e "const bungit = require('./lib/bungit.js'); if (typeof bungit.Repository !== 'function') { throw new Error('bungit loaded without its API'); }"
 
       - name: Test
         # need arm64 runners or an emulator to run tests
@@ -192,7 +222,7 @@ jobs:
 
       - name: Package prebuild
         id: package
-        if: always() && steps.install.outcome == 'success' && (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '') && matrix.node == 22
+        if: always() && steps.install.outcome == 'success' && (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '' || github.event_name == 'workflow_dispatch') && matrix.node == 22
         run: |
           npm install -g @mapbox/node-pre-gyp
           node lifecycleScripts\clean
